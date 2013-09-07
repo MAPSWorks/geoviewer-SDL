@@ -1,0 +1,19 @@
+{
+	"name": "geoviewer",
+	"targetPath": "bin", 
+	"targetName": "geoviewer", 
+	"description": "Simple viewer for OSM and other geospatial data",
+	"homepage": "http://example.org",
+	"copyright": "Copyright © 2013, Alexandr Druzhinin",
+	"lflags": [
+	], 
+	"libs": [
+	],
+	"authors": [
+		"Alexandr Druzhinin"
+	],
+	"dependencies": {
+		"arsd": "~master",
+		"derelict": "~master"
+	}
+}

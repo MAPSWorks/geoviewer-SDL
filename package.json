@@ -5,6 +5,11 @@
 	"description": "Simple viewer for OSM and other geospatial data",
 	"homepage": "http://example.org",
 	"copyright": "Copyright © 2013, Alexandr Druzhinin",
+	"versions": [
+		"Derelict3",
+		"gl3n",
+		"SDLImage"
+	],
 	"lflags": [
 	], 
 	"libs": [
@@ -13,6 +18,8 @@
 		"Alexandr Druzhinin"
 	],
 	"dependencies": {
+		"gl3n": "~master",
+		"glamour": "~master",
 		"arsd": "~master",
 		"derelict": "~master"
 	}

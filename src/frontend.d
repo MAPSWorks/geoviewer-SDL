@@ -3,6 +3,7 @@ module frontend;
 import std.conv: text;
 
 import derelict.sdl2.sdl;
+import derelict.sdl2.image;
 import derelict.opengl3.gl3;
 
 import renderer;
@@ -21,13 +22,13 @@ public:
 	this(uint width, uint height)
 	{
 		DerelictSDL2.load();
+		DerelictSDL2Image.load();
 	    DerelictGL3.load();
 
 	    if (SDL_Init(SDL_INIT_VIDEO) < 0)
 	        throw new Exception("Failed to initialize SDL: " ~ SDL_GetError().text);
 	    
-	    scope(failure)
-	    	SDL_Quit();
+	    scope(failure) SDL_Quit();
 
 	    // Set OpenGL version
 	    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
@@ -43,14 +44,12 @@ public:
 
 	    if (!sdl_window_) 
 	    	throw new Exception("Failed to create a SDL window: " ~ SDL_GetError().text);
-	    scope(failure) 
-	    	SDL_DestroyWindow(sdl_window_);
+	    scope(failure) SDL_DestroyWindow(sdl_window_);
 
 	    gl_context_ = SDL_GL_CreateContext(sdl_window_);
 	    if (gl_context_ is null) 
 	    	throw new Exception("Failed to create a OpenGL context: " ~ SDL_GetError().text);
-	    scope(failure)
-	    	SDL_GL_DeleteContext(gl_context_);
+	    scope(failure) SDL_GL_DeleteContext(gl_context_);
 
 	    DerelictGL3.reload();
 

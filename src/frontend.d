@@ -2,8 +2,9 @@ module frontend;
 
 import std.conv: text;
 import std.concurrency: Tid, receiveTimeout, OwnerTerminated, Variant;
-import std.datetime: dur;
+import std.datetime: dur, StopWatch;
 import std.stdio: stderr, writeln, writefln;
+import core.thread: Thread;
 
 import derelict.sdl2.sdl;
 import derelict.sdl2.image;
@@ -11,8 +12,8 @@ import derelict.opengl3.gl3;
 
 import renderer;
 
-// фронтэнд получает от ОС ввод и отправляет его бекенду,
-// получает от бекенда подготовленные данные и отображает их
+// Frontend receives user input from OS and sends it to backend,
+// receves from backend processed data and renders it
 class FrontEnd
 {
 private:
@@ -71,9 +72,17 @@ public:
 	// run frontend in the current thread
 	void run()
 	{
-		while(true)
+        enum FRAMES_PER_SECOND = 60;
+        
+        //The frame rate regulator
+        StopWatch fps;
+        while(true)
 		{
-			// process events from OS, if result is 
+			//Start the frame timer
+            fps.reset();
+            fps.start();
+
+            // process events from OS, if result is 
 			// false then break loop
 			if(!processEvents())
 				break;
@@ -84,15 +93,21 @@ public:
 			renderer_.draw();
 
         	SDL_GL_SwapWindow(sdl_window_);
+
+            if( ( fps.peek.msecs < 1000 / FRAMES_PER_SECOND ) )
+            {
+                //Sleep the remaining frame time
+                Thread.sleep(dur!"msecs"( (1000 / FRAMES_PER_SECOND) - fps.peek.msecs));
+            }
 		}
 	}
 
 	bool processEvents()
 	{
     	bool is_running = true;
-        SDL_Event event;
         // handle all SDL events that we might've received in this loop iteration
-        if (SDL_WaitEvent(&event)) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event)) {
             switch(event.type){
                 // user has clicked on the window's close button
                 case SDL_QUIT:

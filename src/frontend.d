@@ -1,6 +1,9 @@
 module frontend;
 
 import std.conv: text;
+import std.concurrency: Tid, receiveTimeout, OwnerTerminated, Variant;
+import std.datetime: dur;
+import std.stdio: stderr, writeln, writefln;
 
 import derelict.sdl2.sdl;
 import derelict.sdl2.image;
@@ -130,6 +133,29 @@ public:
 
     void receiveMsg()
     {
-
+		// talk to logic thread
+        bool msg;   
+        do{     
+            msg = receiveTimeout(dur!"usecs"(1),
+            	(string str, uint amount)
+            	{
+            		if(str == "startTileSet")
+            			renderer_.startTileset(amount);
+            		else
+            			stderr.writefln("Unknown message received by GUI thread: %s, %d", str, amount);
+            	},
+                (shared(Tile) shared_tile) {
+                    auto tile = cast(Tile) shared_tile;
+                    assert(tile !is null);
+                    renderer_.setTile(tile);
+                },
+                (OwnerTerminated ot) {
+                    writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Owner terminated");
+                },
+                (Variant any) {
+                    stderr.writeln("Unknown message received by GUI thread: " ~ any.type.text);
+                }   
+            );
+        } while(msg);
     }
 }

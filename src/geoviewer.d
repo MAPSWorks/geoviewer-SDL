@@ -1,5 +1,7 @@
 module geoviewer;
 
+import std.concurrency: Tid, thisTid, send;
+
 import frontend: FrontEnd;
 import backend: BackEnd;
 
@@ -17,7 +19,9 @@ public:
 
 	void run()
 	{
-		backend_.runAsync();
+		auto tid = backend_.runAsync();
+		// notify backend what thread id the frontend has
+		tid.send(thisTid);
 		frontend_.run();
 	}
 

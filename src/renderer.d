@@ -1,7 +1,11 @@
 module renderer;
 
 import std.string: toStringz;
-import std.conv: text;
+import std.conv: text, to;
+import std.stdio: writeln, writefln, stderr;
+import std.exception: enforce;
+import std.range: iota;
+import std.array: array;
 
 import derelict.sdl2.sdl: SDL_GetError;
 import derelict.opengl3.gl3;
@@ -10,22 +14,40 @@ import glamour.shader: Shader;
 import glamour.vbo: Buffer, ElementBuffer;
 import glamour.texture: Texture2D;
 
-import std.stdio;
+import tile: Tile;
+
+// class describing slippy tile from opengl point of view
+private class GLTile
+{
+	VAO vao;
+	Buffer vertices;
+	Buffer tex_coords;
+	ElementBuffer indices;
+	Texture2D texture;
+
+	void remove()
+	{
+		vertices.remove();
+		indices.remove();
+		tex_coords.remove();
+		texture.remove();
+		vao.remove();
+	}
+}
 		
 class Renderer
 {
 private:
 	uint width_, height_;
 
-	float[] vertices_, texture_coords_;
-	ushort[] indices_;
 	GLint position_, tex_coord_;
 
-	VAO vao_;
 	Shader program_;
-	Buffer vbo_, tbo_;
-	ElementBuffer ibo_;
-	Texture2D texture_;
+
+	immutable enum tileAmount = 1024;
+	uint downloading_total_; // total tiles to be downloaded
+	GLTile[] current_set_, // current tile set, that's being rendered
+		downloading_set_; // set of downloading tiles that after finishing will replace current tile set
 
 	static immutable string example_program_src_ = `
 		#version 120
@@ -73,25 +95,6 @@ uniform int multiplicationFactor = 8;
 public:
 	this(uint width, uint heigth)
 	{
-		vertices_ = [ -0.3, -0.3,  0.3, -0.3,  -0.3, 0.3,  0.3, 0.3 ];
-	    indices_ = [0, 1, 2, 3];
-		texture_coords_ = [ 0.00, 0.00,  01.00, 0.00,  0.00, 01.00,  01.00, 01.00 ];
-
-	    vao_ = new VAO();
-	    vao_.bind();
-
-	    // Create VBO
-		vbo_ = new Buffer(vertices_);
-
-	    // Create IBO
-		ibo_ = new ElementBuffer(indices_);
-
-		// Create buffer object for texture coordinates
-		tbo_ = new Buffer(texture_coords_);
-		texture_ = Texture2D.from_image("cache/nodata.png");
-		texture_.set_parameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
-		texture_.set_parameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
-
 		// Create program
 	    program_ = new Shader("example_program", example_program_src_);
 	 	program_.bind();
@@ -103,33 +106,99 @@ public:
 	{
 		glClearColor(1, 0.9, 0.8, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-        
-        vbo_.bind();
-        glEnableVertexAttribArray(position_);
-     
-		glVertexAttribPointer(position_, 2, GL_FLOAT, GL_FALSE, 0, null);
-     
-        ibo_.bind();
 
-        tbo_.bind();
-        texture_.bind_and_activate();
-        glEnableVertexAttribArray(tex_coord_);
-        glVertexAttribPointer(tex_coord_, 2, GL_FLOAT, GL_FALSE, 0, null);
-     
-        glDrawElements(GL_TRIANGLE_STRIP, 4, GL_UNSIGNED_SHORT, null);
-     
-        glDisableVertexAttribArray(tex_coord_);     
-        glDisableVertexAttribArray(position_);
+        foreach(gltile; current_set_)
+        {
+        	gltile.vao.bind();
+        	gltile.texture.bind_and_activate();
+        	glDrawElements(GL_TRIANGLE_STRIP, gltile.indices.length.to!int, GL_UNSIGNED_SHORT, null);
+			gltile.texture.unbind();
+        	gltile.vao.unbind();
+        }
 	}
 
 	void close()
 	{
 		// free resources
-		texture_.remove();
-		tbo_.remove();
-        ibo_.remove();
-        vbo_.remove();
+		foreach(gltile; current_set_)
+			gltile.remove();
+		foreach(gltile; downloading_set_)
+			gltile.remove();
+
         program_.remove();
-        vao_.remove();
+	}
+
+	/// make downloaded set null and
+	/// reserve place for it
+	void startTileset(uint amount)
+	{
+		if(amount > tileAmount)
+		{
+			stderr.writefln("Too much tiles in set (max %s): %s", tileAmount, amount);
+			amount = tileAmount;
+		}
+		downloading_set_ = null;
+		downloading_total_ = amount;
+		downloading_set_.reserve(amount);
+	}
+
+	/// make downloaded set the current set
+	/// and the current set make null
+	void finishTileset()
+	{
+		auto tmp_set = current_set_;
+		current_set_ = downloading_set_;
+		downloading_set_ = null;
+		foreach(gltile; tmp_set)
+			gltile.remove();
+	}
+
+	/// add tile to downloaded set, if tile amount
+	/// is more than tileAmount value ignore excessive tiles
+	void setTile(Tile tile)
+	{
+		if(downloading_set_.length == tileAmount)
+			return;
+
+		enforce(tile);
+		auto gltile = new GLTile();
+		gltile.vao = new VAO();
+		
+		// create texture using tile data
+		gltile.texture = new Texture2D();
+		with(tile) gltile.texture.set_data(data, internal_format, tile.width, height, format, type);
+		gltile.texture.set_parameter(GL_TEXTURE_MIN_FILTER, GL_LINEAR);
+		gltile.texture.set_parameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+        gltile.texture.set_parameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
+        gltile.texture.set_parameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
+
+		auto offset = downloading_set_.length.to!int - 1;
+
+		gltile.vertices = new Buffer(tile.vertices);
+	    gltile.tex_coords = new Buffer(tile.tex_coords);
+	    gltile.indices = new ElementBuffer([0, 1, 2, 3].to!(ushort[]));
+
+	    // start compiling to VAO
+	    gltile.vao.bind();
+	    
+		gltile.vertices.bind();
+        glEnableVertexAttribArray(position_);     
+		glVertexAttribPointer(position_, 2, GL_FLOAT, GL_FALSE, 0, null);
+
+        gltile.indices.bind();
+        
+        gltile.tex_coords.bind();
+        glEnableVertexAttribArray(tex_coord_);
+        glVertexAttribPointer(tex_coord_, 2, GL_FLOAT, GL_FALSE, 0, null);
+
+        gltile.vao.unbind();
+        // finish compiling to VAO
+
+        downloading_set_ ~= gltile;
+
+        writefln("downloaded: %3.2f %%", downloading_set_.length*100/downloading_total_.to!float);
+
+        if(downloading_set_.length == downloading_total_)
+        	finishTileset();
 	}
 }

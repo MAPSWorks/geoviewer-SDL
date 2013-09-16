@@ -11,6 +11,8 @@
 		"SDLImage"
 	],
 	"lflags": [
+		"-lphobos2",
+		"-lcurl"
 	], 
 	"libs": [
 	],

@@ -21,6 +21,8 @@ private:
 	SDL_Window* sdl_window_;
 	SDL_GLContext gl_context_;
 
+    uint mouse_x_, mouse_y_;
+
 public:
 
 	this(uint width, uint height)
@@ -90,7 +92,7 @@ public:
 			receiveMsg();
 			// draw result of processing events and 
 			// receiving messages
-			renderer_.draw();
+			renderer_.draw(mouse_x_, mouse_y_);
 
         	SDL_GL_SwapWindow(sdl_window_);
 
@@ -136,9 +138,26 @@ public:
                 	}
                 	break;	
 	            case SDL_MOUSEMOTION:
-	                break; 
+                    mouse_x_ = event.motion.x;
+                    mouse_y_ = event.motion.y;
+
+                    if (event.motion.state & SDL_BUTTON_RMASK) {
+                        renderer_.camera.scrollingEnabled = true;
+                    } else {
+                        renderer_.camera.scrollingEnabled = false;
+                    }   
+                break; 
 	            case SDL_MOUSEBUTTONDOWN:
 	                break;    
+                case SDL_MOUSEWHEEL:
+                    if(event.wheel.y)
+                    {
+                        if (event.wheel.y > 0)
+                            renderer_.camera.multiplyScale(.975);
+                        else
+                            renderer_.camera.multiplyScale(1.025);
+                    }
+                    break;
                 default:
                     break;
             }

@@ -15,6 +15,7 @@ import glamour.vbo: Buffer, ElementBuffer;
 import glamour.texture: Texture2D;
 
 import tile: Tile;
+import camera: Camera, Camera2D, Camera3D;
 
 // class describing slippy tile from opengl point of view
 private class GLTile
@@ -34,8 +35,32 @@ private class GLTile
 		vao.remove();
 	}
 }
+
+private class RendererWithCamera
+{
+private:
+	Camera2D camera_2d_;
+	Camera3D camera_3d_;
+	enum CameraMode { mode2D, mode3D };
+	CameraMode camera_mode_;
+
+public:
+
+	@property Camera camera()
+	{
+		final switch(camera_mode_)
+		{
+			case CameraMode.mode2D:
+				return camera_2d_;
+			case CameraMode.mode3D:
+				return camera_3d_;
+		}
+	}
+
+	alias camera this;
+}
 		
-class Renderer
+class Renderer : RendererWithCamera
 {
 private:
 	uint width_, height_;
@@ -52,14 +77,17 @@ private:
 	static immutable string example_program_src_ = `
 		#version 120
 		vertex:
-		in vec2 position;
-		in vec2 inCoord;
+		in vec2 in_position;
+		in vec2 in_coord;
+
+		// mvpmatrix is the result of multiplying the model, view, and projection matrices */
+		uniform mat4 mvpmatrix;
 
 		out vec2 texCoord;
 		void main(void)
 		{
-		    gl_Position = vec4(position, 0, 1);
-			texCoord = inCoord;
+		    gl_Position = mvpmatrix * vec4(in_position, 0, 1);
+			texCoord = in_coord;
 		}
 		fragment:
 		in vec2 texCoord;
@@ -93,17 +121,26 @@ uniform int multiplicationFactor = 8;
 
 
 public:
-	this(uint width, uint heigth)
+	this(uint width, uint height)
 	{
 		// Create program
 	    program_ = new Shader("example_program", example_program_src_);
 	 	program_.bind();
-	    position_ = program_.get_attrib_location("position");
-	    tex_coord_ = program_.get_attrib_location("inCoord");
+	    position_ = program_.get_attrib_location("in_position");
+	    tex_coord_ = program_.get_attrib_location("in_coord");
+	    camera_2d_ = new Camera2D(width, height, 180);
+	    camera_3d_ = new Camera3D(width, height, 1.0);
+	    camera_mode_ = CameraMode.mode2D;
 	}
 
-	void draw()
+	void draw(uint mouse_x, uint mouse_y)
 	{
+		camera.doScrolling(mouse_x, mouse_y);
+
+		auto matrix = camera.getModelViewMatrix();
+		/* Bind our modelmatrix variable to be a uniform called mvpmatrix in our shaderprogram */
+      	glUniformMatrix4fv(glGetUniformLocation(program_, "mvpmatrix"), 1, GL_TRUE, matrix.value_ptr);
+
 		glClearColor(1, 0.9, 0.8, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 

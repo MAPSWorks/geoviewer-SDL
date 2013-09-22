@@ -3,6 +3,11 @@ module tile;
 private {
     import std.string: toStringz, text;
     import std.exception: enforce;
+    import std.conv: to;
+    import std.math: PI, atan, sinh, pow;
+
+    import gl3n.linalg: vec3;
+    
     version(stb)
     {
         static assert(0, "stb support is not realized yet!");
@@ -43,7 +48,20 @@ class Tile {
     	this.type = type;
     }
 
-    static static Tile loadFromFile(string filename) {
+    static vec3 tileToGeodetic(vec3 tile) // lon, lat, zoom
+    {
+        uint zoom = to!uint(tile.z);
+        double n = PI*(1 - 2.0 * tile.y / pow(2, zoom));
+
+        vec3 geo;
+        geo.x = to!double(tile.x * 360 / pow(2, zoom) - 180.0);
+        geo.y = to!double(180.0 / PI * atan(sinh(n)));
+        geo.z = zoom;
+
+        return geo;
+    }
+
+    static Tile loadFromFile(string filename) {
         Tile tile;
 
         version(stb) {        

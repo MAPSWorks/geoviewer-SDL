@@ -49,28 +49,43 @@ private:
 		enforce(frontend != thisTid, "frontend and backend shall be running in different threads!");
 		try 
 		{
-			frontend.send("startTileSet", 4u); // start new tile set of 3 tiles
+			frontend.send("startTileSet", 16u); // start new tile set of 3 tiles
 
-			foreach(i; 0..4u)
-			{
-				try // ignore the failure while loading single tile
+			foreach(j; 0..4)
+				foreach(i; 0..4u)
 				{
-					string tile_path = downloadTile(7, i+111, 44);
-					auto tile = Tile.loadFromFile(tile_path);
-					with(tile)
+					try // ignore the failure while loading single tile
 					{
-						vertices = [ -1.0 + 0.5*i, -0.0,  -0.5 + 0.5*i, -0.0,  -1.0 + 0.5*i, 0.5,  -0.5 + 0.5*i, 0.5 ];
-						tex_coords = [ 0.00, 0.00,  1.00, 0.00,  0.00, 1.00,  1.00, 1.00 ];
+						uint zoom = 2;
+						uint x = i + 0;
+						uint y = j;
+						string tile_path = downloadTile(zoom, x, y);
+						auto tile = Tile.loadFromFile(tile_path);
+						with(tile)
+						{
+							vertices.length = 8;
+							auto p = Tile.tileToGeodetic(vec3(x, y, zoom));
+							vertices[0] = p.vector[0];
+							vertices[1] = p.vector[1];
+							p = Tile.tileToGeodetic(vec3(x + 1, y, zoom));
+							vertices[2] = p.vector[0];
+							vertices[3] = p.vector[1];
+							p = Tile.tileToGeodetic(vec3(x, y + 1, zoom));
+							vertices[4] = p.vector[0];
+							vertices[5] = p.vector[1];
+							p = Tile.tileToGeodetic(vec3(x + 1, y + 1, zoom));
+							vertices[6] = p.vector[0];
+							vertices[7] = p.vector[1];
+							tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
+						}
+						frontend.send(cast(shared) tile);
 					}
-					frontend.send(cast(shared) tile);
+					catch(Throwable t)
+					{
+						stderr.writeln("some error occured:");
+						stderr.writeln(t.msg);
+					}
 				}
-				catch(Throwable t)
-				{
-					stderr.writeln("some error occured:");
-					stderr.writeln(t.msg);
-				}
-			}
-
 		}
 		catch(Throwable t)
 		{

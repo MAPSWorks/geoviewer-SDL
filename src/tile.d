@@ -115,7 +115,11 @@ class Tile {
             auto fmt = SDL_PixelFormat(SDL_PIXELFORMAT_RGBA8888, null, 
                 32, // bits per pixel
                 4,  // bytes per pixel
-                0, 0, 0, 0, // mask
+                0,  // padding
+                0x000000ff, // red mask
+                0x0000ff00, // green mask
+                0x00ff0000, // blue mask 
+                0xff000000, // alpha mask
             ); // TODO dirty hack, hardcoded value used
 
             auto flags = 0;

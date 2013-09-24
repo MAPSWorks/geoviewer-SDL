@@ -10,7 +10,7 @@ class Camera
 protected:
 	mat4 modelmatrix_;
 	double scale_;
-	double world_size_; // the viewable volume is -world_size..world_size, so really size is twice more
+	double world_width_; // world height is computed using aspect ratio
 	double scale_min_;
 	double scale_max_;
 
@@ -24,13 +24,14 @@ protected:
 	abstract void computeModelViewMatrix();
 public:
 
-	this(double size, double scale_min = 0.5, double scale_max = 1.5)
+	this(uint width, uint height, double world_width, double scale_min = 0.5, double scale_max = 1.5)
 	{
 		scale_ = 1.0;
-		world_size_ = size;
+		world_width_ = world_width;
 		scale_min_ = scale_min;
 		scale_max_ = scale_max;
 		eyes_ = vec3(0, 0, 1);
+		resize(width, height);
 	}
 
 	final @property scaleMin(double value) { scale_min_ = value; }
@@ -116,29 +117,28 @@ protected:
 	override void computeModelViewMatrix()
 	{
 		// set the matrix
-		auto world = mat4.identity.translate(-eyes_.x, eyes_.y, -eyes_.z);
+		auto world = mat4.identity.translate(-eyes_.x, eyes_.y, -eyes_.z); // invert y coordinate
 		auto view = mat4.look_at(vec3(0, 0, 1), vec3(0, 0, 0), vec3(0, 1., 0));
-		auto size = scale_ * world_size_;
+		auto size = scale_ * world_width_ / 2;
 		auto projection = mat4.orthographic(-size * aspect_ratio_, size * aspect_ratio_, -size, size, 2*size, 0);
 		modelmatrix_ = projection * view * world;
 	}
 
 public:
 
-	this(uint width, uint height, double size, double min_scale = 0.5, double max_scale = 1.5)
+	this(uint width, uint height, double world_width, double min_scale = 0.5, double max_scale = 1.5)
 	{
-		super(size, min_scale, max_scale);
-		resize(width, height);
+		super(width, height, world_width, min_scale, max_scale);
 	}
 
 	override vec3 mouse2world(vec2 xy)
 	{
-		return vec3(xy.x.to!double, xy.y.to!double, 0.)*(scale_* 2 * world_size_/viewport_height_);
+		return vec3(xy.x.to!double, xy.y.to!double, 0.)*(scale_*aspect_ratio_*world_width_/viewport_width_);
 	}
 
 	override vec2 world2mouse(vec3 xyz)
 	{
-		return vec2(xyz.x.to!uint, xyz.y.to!uint)*(scale_* 2 * world_size_/viewport_height_);
+		return vec2(xyz.x.to!uint, xyz.y.to!uint)*(scale_*aspect_ratio_*world_width_/viewport_width_);
 	}
 }
 

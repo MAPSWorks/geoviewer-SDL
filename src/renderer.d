@@ -128,7 +128,7 @@ public:
 	 	program_.bind();
 	    position_ = program_.get_attrib_location("in_position");
 	    tex_coord_ = program_.get_attrib_location("in_coord");
-	    camera_2d_ = new Camera2D(width, height, 180);
+	    camera_2d_ = new Camera2D(width, height, width); // set world width equals to window width, i.e. one pixel == one degredd
 	    camera_3d_ = new Camera3D(width, height, 1.0);
 	    camera_mode_ = CameraMode.mode2D;
 	}

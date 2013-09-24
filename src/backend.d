@@ -51,12 +51,15 @@ private:
 		{
 			frontend.send("startTileSet", 16u); // start new tile set of 3 tiles
 
+			uint zoom = 2;
+			auto step = 256; // real size of tile in pixels
+			double level_size = step * pow(2, zoom); // all tiles of the level with current zoom will take this amount of pixels
+
 			foreach(j; 0..4)
 				foreach(i; 0..4u)
 				{
 					try // ignore the failure while loading single tile
 					{
-						uint zoom = 2;
 						uint x = i + 0;
 						uint y = j;
 						string tile_path = downloadTile(zoom, x, y);
@@ -64,18 +67,18 @@ private:
 						with(tile)
 						{
 							vertices.length = 8;
-							auto p = Tile.tileToGeodetic(vec3(x, y, zoom));
-							vertices[0] = p.vector[0];
-							vertices[1] = p.vector[1];
-							p = Tile.tileToGeodetic(vec3(x + 1, y, zoom));
-							vertices[2] = p.vector[0];
-							vertices[3] = p.vector[1];
-							p = Tile.tileToGeodetic(vec3(x, y + 1, zoom));
-							vertices[4] = p.vector[0];
-							vertices[5] = p.vector[1];
-							p = Tile.tileToGeodetic(vec3(x + 1, y + 1, zoom));
-							vertices[6] = p.vector[0];
-							vertices[7] = p.vector[1];
+							vertices[0] = -level_size / 2 + x*step + 0; 
+							vertices[1] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
+
+							vertices[2] = -level_size / 2 + x*step + step; 
+							vertices[3] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
+
+							vertices[4] = -level_size / 2 + x*step + 0; 
+							vertices[5] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
+
+							vertices[6] = -level_size / 2 + x*step + step; 
+							vertices[7] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
+							
 							tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 						}
 						frontend.send(cast(shared) tile);

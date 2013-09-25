@@ -5,25 +5,13 @@ private {
     import std.exception: enforce;
     import std.conv: to;
     import std.math: PI, atan, sinh, pow;
+    import std.file: exists, mkdirRecurse, dirName, read;
+    import std.path: buildNormalizedPath, absolutePath;
+    import std.net.curl: download;
 
     import gl3n.linalg: vec3;
-    
-    version(stb)
-    {
-        static assert(0, "stb support is not realized yet!");
-    } 
-    else
-    version(SDLImage) 
-    {
-        import derelict.sdl2.sdl: SDL_Surface, SDL_FreeSurface, SDL_CreateRGBSurface, SDL_GetError
-                                , SDL_PixelFormat, SDL_ConvertSurface, SDL_PIXELFORMAT_RGBA8888;
-        import derelict.sdl2.image: IMG_Load;
-        import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_RGBA, GL_UNSIGNED_BYTE;
-    }
-    else
-    {
-        static assert(0, "DevIL support is not realized yet!");
-    }
+    import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
+    import cairo.cairo: ImageSurface;
 }
 
 class Tile {
@@ -61,99 +49,32 @@ class Tile {
         return geo;
     }
 
-    static Tile loadFromFile(string filename) {
-        Tile tile;
+    static string downloadTile(uint zoom, uint tilex, uint tiley, string url, string local_path)
+    {
+        string absolute_path = absolutePath(local_path);
+        auto filename = tiley.text ~ ".png";
+        auto full_path = buildNormalizedPath(absolute_path, zoom.text, tilex.text, filename);
 
-        version(stb) {        
-            int x;
-            int y;
-            int comp;
-            ubyte* data = stbi_load(toStringz(filename), &x, &y, &comp, 0);
-            scope(exit) stbi_image_free(data);
-
-            if(data is null) {
-                throw new TextureException("Unable to load image: " ~ filename);
-            }
-            
-            uint image_format;
-            switch(comp) {
-                case 3: image_format = GL_RGB; break;
-                case 4: image_format = GL_RGBA; break;
-                default: throw new TextureException("Unknown/Unsupported stbi image format");
-            }
-
-            tile = new Tile((float[]).init, (float[]).init, data, image_format, x, y, image_format, GL_UNSIGNED_BYTE);
-        } else version (SDLImage) {
-            // make sure the tileture has the right side up
-            //thanks to tito http://stackoverflow.com/questions/5862097/sdl-opengl-screenshot-is-black 
-            SDL_Surface* flip(SDL_Surface* surface) { 
-                SDL_Surface* result = SDL_CreateRGBSurface(surface.flags, surface.w, surface.h, 
-                                                           surface.format.BytesPerPixel * 8, surface.format.Rmask, surface.format.Gmask, 
-                                                           surface.format.Bmask, surface.format.Amask); 
-              
-                ubyte* pixels = cast(ubyte*) surface.pixels; 
-                ubyte* rpixels = cast(ubyte*) result.pixels; 
-                uint pitch = surface.pitch;
-                uint pxlength = pitch * surface.h; 
-              
-                assert(result != null); 
-
-                for(uint line = 0; line < surface.h; ++line) {  
-                    uint pos = line * pitch; 
-                    rpixels[pos..pos+pitch] = pixels[(pxlength-pos)-pitch..pxlength-pos]; 
-                } 
-
-                return result; 
-            }
-            
-            auto original = IMG_Load(filename.toStringz());
-            
-            enforce(original, new Exception("Error loading image " ~ filename ~ ": " ~ SDL_GetError().text));
-            scope(exit) SDL_FreeSurface(original);
-
-            // convert to our format
-            auto fmt = SDL_PixelFormat(SDL_PIXELFORMAT_RGBA8888, null, 
-                32, // bits per pixel
-                4,  // bytes per pixel
-                0,  // padding
-                0x000000ff, // red mask
-                0x0000ff00, // green mask
-                0x00ff0000, // blue mask 
-                0xff000000, // alpha mask
-            ); // TODO dirty hack, hardcoded value used
-
-            auto flags = 0;
-            auto surface = SDL_ConvertSurface(original, &fmt, flags);
-            if(surface is null)
-                throw new Exception("Error converting " ~ filename);
-            
-            enforce(surface.format.BytesPerPixel == 3 || surface.format.BytesPerPixel == 4, "With SDLImage Glamour supports loading images only with 3 or 4 bytes per pixel format.");
-            auto image_format = GL_RGB;
-            
-            if (surface.format.BytesPerPixel == 4) {
-              image_format = GL_RGBA;
-            }
-            
-            auto flipped = flip(surface);
-            scope(exit) SDL_FreeSurface(flipped);
-            size_t size = surface.pitch*surface.h;
-            ubyte[] data = new ubyte[](size);
-            data[] = (cast(ubyte*)flipped.pixels)[0..size];
-            tile = new Tile((float[]).init, (float[]).init, data, image_format, surface.w, surface.h, image_format, GL_UNSIGNED_BYTE);
-        } else {
-            /// DevIl is default choice
-            ILuint id;
-            ilGenImages(1, &id);
-            scope(exit) ilDeleteImage(1, id);
-            
-            if(!ilLoadImage(toStringz(filename))) {
-                throw new TextureException("Unable to load image: " ~ filename);
-            }
-            
-            tile = new Tile((float[]).init, (float[]).init, ilGetData(), ilGetInteger(IL_IMAGE_FORMAT),
-                                      ilGetInteger(IL_IMAGE_WIDTH), ilGetInteger(IL_IMAGE_HEIGHT),
-                                      ilGetInteger(IL_IMAGE_FORMAT), ilGetInteger(IL_IMAGE_TYPE));
+        if(!exists(full_path) && url) {
+            //trying to download from openstreet map
+            auto dir = dirName(full_path);
+            if(!exists(dir))
+                mkdirRecurse(dir); // creating directories may be thread unsafe if different threads try to create the same dir or different dirs that belong 
+                                   // to the single parent dir that also is created by these threads. it's better to create dirs in one parent thread or you
+                                   // should ensure there won't be collisions.
+            download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
         }
+
+        return full_path;
+    }
+
+    static Tile loadFromPng(string filename) {
+        
+        auto surface = ImageSurface.fromPng(filename);
+
+        size_t size = surface.getStride*surface.getHeight;
+
+        auto tile = new Tile((float[]).init, (float[]).init, surface.getData[0..size], GL_RGB, surface.getWidth, surface.getHeight, GL_BGRA, GL_UNSIGNED_BYTE);
 
         return tile;
     }

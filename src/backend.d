@@ -1,15 +1,10 @@
 module backend;
 
-import std.concurrency: spawn, send, Tid, thisTid, receiveTimeout, receiveOnly, OwnerTerminated, Variant;
+import std.concurrency: spawn, send, Tid, thisTid, receiveTimeout, receiveOnly, spawnLinked, OwnerTerminated, Variant;
 import std.datetime: dur;
 import std.stdio: stderr, writeln;
 import std.exception: enforce;
 import std.conv: text;
-import std.file: exists, mkdirRecurse, dirName;
-import std.path: buildNormalizedPath, absolutePath;
-import std.net.curl: download;
-
-import derelict.sdl2.image;
 
 import tile;
 
@@ -20,65 +15,92 @@ class BackEnd
 private:
 	string url_, cache_path_;
 
-	static string downloadTile(uint zoom, uint tilex, uint tiley, string url, string cache_path)
+	static void downloading(Tid parent)
 	{
-		string absolute_path = absolutePath(cache_path);
-	    auto filename = tiley.text ~ ".png";
-	    auto full_path = buildNormalizedPath(absolute_path, zoom.text, tilex.text, filename);
+		while(true)
+        {
+            try {
+            	// wait for tile descripton to process
+                //                      zoom  x     y     path    url
+                auto msg = receiveOnly!(uint, uint, uint, string, string)();
+                
+                auto zoom = msg[0];
+                auto x = msg[1];
+                auto y = msg[2];
+                auto path = msg[3];
+                auto url = msg[4];
+                
+                enum step = 256; // real size of tile in pixels
+				double level_size = step * pow(2, zoom); // all tiles of the level with current zoom will take this amount of pixels
 
-	    if(!exists(full_path) && url) {
-	        //trying to download from openstreet map
-	        auto dir = dirName(full_path);
-	        if(!exists(dir))
-	            mkdirRecurse(dir);
-	        download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
-	    }
+                string tile_path = Tile.downloadTile(zoom, x, y, url, path);
+				auto tile = Tile.loadFromPng(tile_path);
+				with(tile)
+				{
+					vertices.length = 8;
+					vertices[0] = -level_size / 2 + x*step + 0; 
+					vertices[1] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
 
-	    return full_path;		
+					vertices[2] = -level_size / 2 + x*step + step; 
+					vertices[3] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
+
+					vertices[4] = -level_size / 2 + x*step + 0; 
+					vertices[5] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
+
+					vertices[6] = -level_size / 2 + x*step + step; 
+					vertices[7] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
+					
+					tex_coords = [ 0.00, 0.00,  1.00, 0.00,  0.00, 1.00,  1.00, 1.00 ]; // we invert y coordinate, because opengl issue
+				}
+				parent.send(cast(shared) tile);
+            }
+            catch(OwnerTerminated ot) {
+                break;
+            }
+            catch(Exception e) {
+                writeln("exception: ", e.msg);
+            }
+            catch(Throwable t) {
+                writeln("throwable: ", t.msg);
+            }
+        }
 	}
 
 	static run(string url, string cache_path)
 	{
-		DerelictSDL2Image.load();
+		enum maxWorkers = 1;
+	    Tid[maxWorkers] workers;
+	    uint current_worker;
 
 		auto frontend = receiveOnly!Tid();
 		enforce(frontend != Tid.init, "Wrong frontend tid.");
 		enforce(frontend != thisTid, "frontend and backend shall be running in different threads!");
 		try 
 		{
-			frontend.send("startTileSet", 16u); // start new tile set of 3 tiles
+			// prepare workers
+	        foreach(i; 0..maxWorkers)
+	            workers[i] = spawnLinked(&downloading, frontend); // anwers will be send to frontend immediatly
 
-			uint zoom = 2;
-			auto step = 256; // real size of tile in pixels
-			double level_size = step * pow(2, zoom); // all tiles of the level with current zoom will take this amount of pixels
+			
+			uint zoom = 4;
+			if(zoom > 18)
+				zoom = 18;
+			if(zoom < 0)
+				zoom = 0;
+			uint n = pow(2, zoom);
+			
+			frontend.send("startTileSet", n * n); // start new tile set
 
-			foreach(j; 0..4)
-				foreach(i; 0..4u)
+			foreach(uint y; 0..n)
+				foreach(uint x; 0..n)
 				{
 					try // ignore the failure while loading single tile
 					{
-						uint x = i + 0;
-						uint y = j;
-						string tile_path = downloadTile(zoom, x, y, url, cache_path);
-						auto tile = Tile.loadFromFile(tile_path);
-						with(tile)
-						{
-							vertices.length = 8;
-							vertices[0] = -level_size / 2 + x*step + 0; 
-							vertices[1] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
-
-							vertices[2] = -level_size / 2 + x*step + step; 
-							vertices[3] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
-
-							vertices[4] = -level_size / 2 + x*step + 0; 
-							vertices[5] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
-
-							vertices[6] = -level_size / 2 + x*step + step; 
-							vertices[7] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
-							
-							tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
-						}
-						frontend.send(cast(shared) tile);
+						auto current_tid = workers[current_worker];
+                        current_tid.send(zoom, x, y, cache_path, url);
+                        current_worker++;
+                        if(current_worker == maxWorkers)
+                            current_worker = 0;
 					}
 					catch(Throwable t)
 					{
@@ -92,8 +114,6 @@ private:
 			stderr.writeln("some error occured:");
 			stderr.writeln(t.msg);
 		}
-
-		DerelictSDL2Image.unload();
 	}
 
 public:

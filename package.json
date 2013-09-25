@@ -8,13 +8,20 @@
 	"versions": [
 		"Derelict3",
 		"gl3n",
-		"SDLImage"
+		"SDLImage",
+		"CAIRO_HAS_PNG_FUNCTIONS"
+	],
+	"dflags": [
+		"-I/home/drug/3rdparties/cairoD/src",
 	],
 	"lflags": [
+		"-L/home/drug/3rdparties/cairoD",
+		"-lcairoD",
 		"-lphobos2",
-		"-lcurl"
+		"-lcurl",
 	], 
 	"libs": [
+		"cairo"
 	],
 	"authors": [
 		"Alexandr Druzhinin"

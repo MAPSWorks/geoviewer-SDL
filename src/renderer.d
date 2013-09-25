@@ -152,6 +152,15 @@ public:
 			gltile.texture.unbind();
         	gltile.vao.unbind();
         }
+
+        foreach(gltile; downloading_set_)
+        {
+        	gltile.vao.bind();
+        	gltile.texture.bind_and_activate();
+        	glDrawElements(GL_TRIANGLE_STRIP, gltile.indices.length.to!int, GL_UNSIGNED_SHORT, null);
+			gltile.texture.unbind();
+        	gltile.vao.unbind();
+        }
 	}
 
 	void close()

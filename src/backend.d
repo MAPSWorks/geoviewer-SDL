@@ -20,12 +20,9 @@ class BackEnd
 private:
 	string url_, cache_path_;
 
-	static string downloadTile(uint zoom, uint tilex, uint tiley)
+	static string downloadTile(uint zoom, uint tilex, uint tiley, string url, string cache_path)
 	{
-		string url = "http://a.tile.openstreetmap.org/";
-		auto local_path = "cache/OSM-standard";
-		
-		string absolute_path = absolutePath(local_path);
+		string absolute_path = absolutePath(cache_path);
 	    auto filename = tiley.text ~ ".png";
 	    auto full_path = buildNormalizedPath(absolute_path, zoom.text, tilex.text, filename);
 
@@ -40,7 +37,7 @@ private:
 	    return full_path;		
 	}
 
-	static run()
+	static run(string url, string cache_path)
 	{
 		DerelictSDL2Image.load();
 
@@ -62,7 +59,7 @@ private:
 					{
 						uint x = i + 0;
 						uint y = j;
-						string tile_path = downloadTile(zoom, x, y);
+						string tile_path = downloadTile(zoom, x, y, url, cache_path);
 						auto tile = Tile.loadFromFile(tile_path);
 						with(tile)
 						{
@@ -110,7 +107,7 @@ public:
 	// run backend in other thread
 	Tid runAsync()
 	{
-		return spawn(&run);
+		return spawn(&run, url_, cache_path_);
 	}
 
 	void close()
@@ -124,10 +121,12 @@ public:
         bool msg;   
         do{     
             msg = receiveTimeout(dur!"usecs"(1),
-                (OwnerTerminated ot) {
+            	(OwnerTerminated ot)
+                {
                     writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Owner terminated");
                 },
-                (Variant any) {
+                (Variant any)
+                {
                     stderr.writeln("Unknown message received by GUI thread: " ~ any.type.text);
                 }   
             );

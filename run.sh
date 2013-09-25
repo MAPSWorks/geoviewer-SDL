@@ -1,2 +1,2 @@
 #!/bin/bash
-bin/geoviewer bin/config.xml
+bin/geoviewer bin/osm-no-label.xml

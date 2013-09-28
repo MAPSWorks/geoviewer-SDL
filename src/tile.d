@@ -11,7 +11,8 @@ private {
 
     import gl3n.linalg: vec3;
     import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
-    import cairo.cairo: ImageSurface;
+    import derelict.freeimage.freeimage: FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
+                FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits;
 }
 
 class Tile {
@@ -70,11 +71,18 @@ class Tile {
 
     static Tile loadFromPng(string filename) {
         
-        auto surface = ImageSurface.fromPng(filename);
-
-        size_t size = surface.getStride*surface.getHeight;
-
-        auto tile = new Tile((float[]).init, (float[]).init, surface.getData[0..size], GL_RGB, surface.getWidth, surface.getHeight, GL_BGRA, GL_UNSIGNED_BYTE);
+        auto img_fmt = FreeImage_GetFileType(filename.toStringz, 0);
+        auto original = FreeImage_Load(img_fmt, filename.toStringz, 0);
+     
+        auto image = FreeImage_ConvertTo32Bits(original);
+        FreeImage_Unload(original);
+     
+        int w = FreeImage_GetWidth(image);
+        int h = FreeImage_GetHeight(image);
+     
+        size_t size = FreeImage_GetPitch(image) * h;
+        ubyte[] pixels = FreeImage_GetBits(image)[0..size];
+        auto tile = new Tile((float[]).init, (float[]).init, pixels, GL_RGB, w, h, GL_BGRA, GL_UNSIGNED_BYTE);
 
         return tile;
     }

@@ -6,6 +6,8 @@ import std.stdio: stderr, writeln;
 import std.exception: enforce;
 import std.conv: text;
 
+import derelict.freeimage.freeimage: DerelictFI;
+
 import tile;
 
 // backend получает от фронтенда пользовательский ввод, обрабатывает данные
@@ -17,6 +19,7 @@ private:
 
 	static void downloading(Tid parent)
 	{
+		DerelictFI.load();
 		while(true)
         {
             try {
@@ -50,7 +53,7 @@ private:
 					vertices[6] = -level_size / 2 + x*step + step; 
 					vertices[7] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
 					
-					tex_coords = [ 0.00, 0.00,  1.00, 0.00,  0.00, 1.00,  1.00, 1.00 ]; // we invert y coordinate, because opengl issue
+					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 				}
 				parent.send(cast(shared) tile);
             }
@@ -64,11 +67,12 @@ private:
                 writeln("throwable: ", t.msg);
             }
         }
+		DerelictFI.unload();
 	}
 
 	static run(string url, string cache_path)
 	{
-		enum maxWorkers = 1;
+		enum maxWorkers = 32;
 	    Tid[maxWorkers] workers;
 	    uint current_worker;
 

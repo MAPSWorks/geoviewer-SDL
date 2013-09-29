@@ -1,6 +1,6 @@
 module backend;
 
-import std.concurrency: spawn, send, Tid, thisTid, receiveTimeout, receiveOnly, spawnLinked, OwnerTerminated, Variant;
+import std.concurrency: spawn, send, Tid, thisTid, receiveTimeout, receiveOnly, spawnLinked, OwnerTerminated, LinkTerminated, Variant;
 import std.datetime: dur;
 import std.stdio: stderr, writeln;
 import std.exception: enforce;
@@ -15,24 +15,56 @@ import tile;
 class BackEnd
 {
 private:
+
+	enum childFailed = "child failed";
+	enum tileLoadingFailed = "tile loading failed";
+
 	string url_, cache_path_;
 
-	static void downloading(Tid parent)
+	static void downloading(Tid parent, Tid frontend)
 	{
 		DerelictFI.load();
 		while(true)
         {
-            try {
+            uint zoom, x, y;
+            string path, url;
+
+            try
+            {
             	// wait for tile descripton to process
                 //                      zoom  x     y     path    url
                 auto msg = receiveOnly!(uint, uint, uint, string, string)();
                 
-                auto zoom = msg[0];
-                auto x = msg[1];
-                auto y = msg[2];
-                auto path = msg[3];
-                auto url = msg[4];
-                
+                zoom = msg[0];
+                x = msg[1];
+                y = msg[2];
+                path = msg[3];
+                url = msg[4];
+            }
+            catch(OwnerTerminated ot)
+            {
+            	// normal exit
+            	break;
+            }
+            catch(Throwable t) 
+            {
+                debug writeln("receiveOnly failed: ", t.msg);
+                parent.send(thisTid, childFailed, zoom, x, y); // this means that command from parent wasn't received, child thread crashes
+                							 			       // and parent should relaunch thread. Zoom, x and y are dummy and has no sense
+                							 			       // because they may have invalid value.
+                break;
+            }
+
+            try 
+            {
+                version(none)
+                {
+                	import std.random;
+	                auto i = uniform(0, 15);
+	                if(i == 10)
+	                	throw new Error("error imitation");
+	            }
+
                 enum step = 256; // real size of tile in pixels
 				double level_size = step * pow(2, zoom); // all tiles of the level with current zoom will take this amount of pixels
 
@@ -55,16 +87,24 @@ private:
 					
 					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 				}
-				parent.send(cast(shared) tile);
+				frontend.send(cast(shared) tile);
             }
-            catch(OwnerTerminated ot) {
+            catch(OwnerTerminated ot) 
+            {
+                // normal exit
                 break;
             }
-            catch(Exception e) {
-                writeln("exception: ", e.msg);
+            catch(Exception e) 
+            {
+                debug writeln("exception: ", e.msg);
             }
-            catch(Throwable t) {
-                writeln("throwable: ", t.msg);
+            catch(Throwable t) 
+            {
+                debug writeln("throwable: ", t.msg);
+                parent.send(thisTid, tileLoadingFailed, zoom, x, y);// this means that tile loading failed, child thread crashes
+                							 			 	   // and parent should relaunch thread with the specific zoom, 
+                							 			 	   // x and y values to try loading once again.
+                break;
             }
         }
 		DerelictFI.unload();
@@ -83,10 +123,9 @@ private:
 		{
 			// prepare workers
 	        foreach(i; 0..maxWorkers)
-	            workers[i] = spawnLinked(&downloading, frontend); // anwers will be send to frontend immediatly
-
+	            workers[i] = spawnLinked(&downloading, thisTid, frontend); // anwers will be send to frontend immediatly
 			
-			uint zoom = 4;
+			uint zoom = 3;
 			if(zoom > 18)
 				zoom = 18;
 			if(zoom < 0)
@@ -98,25 +137,75 @@ private:
 			foreach(uint y; 0..n)
 				foreach(uint x; 0..n)
 				{
-					try // ignore the failure while loading single tile
+					auto current_tid = workers[current_worker];
+                    try
 					{
-						auto current_tid = workers[current_worker];
-                        current_tid.send(zoom, x, y, cache_path, url);
-                        current_worker++;
-                        if(current_worker == maxWorkers)
-                            current_worker = 0;
+						current_tid.send(zoom, x, y, cache_path, url);
+	                    current_worker++;
+	                    if(current_worker == maxWorkers)
+	                        current_worker = 0;
 					}
-					catch(Throwable t)
+					catch(LinkTerminated lt)
 					{
-						stderr.writeln("some error occured:");
-						stderr.writeln(t.msg);
+						// just ignore it
+						debug writeln("Child terminated");
 					}
 				}
+
+			// talk to child threads
+	        bool msg; 
+	        bool running = true;
+	        do{     
+	            msg = receiveTimeout(dur!"msecs"(10),
+	            	(Tid tid, string text, uint zoom, uint x, uint y)
+	            	{
+	            		debug writeln(text);
+	            		if(text == childFailed)
+	            		{
+	            			foreach(uint i, w; workers)
+	            				if(w == tid)
+	            				{
+	            					workers[i] = spawnLinked(&downloading, thisTid, frontend);
+	            					debug writeln(childFailed, " received");
+	            					running = false;
+	            				}
+	            		}
+	            		else if(text == tileLoadingFailed)
+	            		{
+							foreach(uint i, w; workers)
+	            				if(w == tid)
+	            				{	
+	            					workers[i] = spawnLinked(&downloading, thisTid, frontend);
+	            					workers[i].send(zoom, x, y, cache_path, url);
+	            					debug writeln(tileLoadingFailed, " received");
+	            					running = false;
+	            				}
+	            		}
+	            		else
+	            		{
+	            			debug stderr.writefln("Unknown type message is received from child:\ntext: %s, zoom: %d, x: %d, y: %d", text, zoom, x, y);
+	            		}
+	            	},
+	            	(LinkTerminated lt)
+	            	{
+	            		debug writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Link terminated");
+	            	},
+	            	(OwnerTerminated ot)
+	                {
+	                    debug writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Owner terminated");
+	                    running = false;
+	                },
+	                (Variant any)
+	                {
+	                    stderr.writeln("Unknown message received by BackEnd running thread: " ~ any.type.text);
+	                }   
+	            );
+	        } while(running);
 		}
-		catch(Throwable t)
+		catch(Exception e)
 		{
 			stderr.writeln("some error occured:");
-			stderr.writeln(t.msg);
+			stderr.writeln(e.msg);
 		}
 	}
 

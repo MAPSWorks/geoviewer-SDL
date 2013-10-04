@@ -1,8 +1,8 @@
 module backend;
 
-import std.concurrency: spawn, send, Tid, thisTid, receiveTimeout, receiveOnly, spawnLinked, OwnerTerminated, LinkTerminated, Variant;
+import std.concurrency: spawn, send, prioritySend, Tid, thisTid, receiveTimeout, receiveOnly, spawnLinked, OwnerTerminated, LinkTerminated, Variant;
 import std.datetime: dur;
-import std.stdio: stderr, writeln;
+import std.stdio: stderr, writeln, writefln;
 import std.exception: enforce;
 import std.conv: text;
 
@@ -21,48 +21,40 @@ private:
 
 	string url_, cache_path_;
 
-	static void downloading(Tid parent, Tid frontend)
+	static void downloading(Tid parent)
 	{
 		DerelictFI.load();
-		while(true)
+		scope(exit) DerelictFI.unload();
+		auto running = true;
+		size_t current_batch_id;
+		
+		while(running)
         {
-            uint zoom, x, y;
+        	uint zoom, x, y;
             string path, url;
 
-            try
-            {
-            	// wait for tile descripton to process
-                //                      zoom  x     y     path    url
-                auto msg = receiveOnly!(uint, uint, uint, string, string)();
-                
-                zoom = msg[0];
-                x = msg[1];
-                y = msg[2];
-                path = msg[3];
-                url = msg[4];
-            }
-            catch(OwnerTerminated ot)
-            {
-            	// normal exit
-            	break;
-            }
-            catch(Throwable t) 
-            {
-                debug writeln("receiveOnly failed: ", t.msg);
-                parent.send(thisTid, childFailed, zoom, x, y); // this means that command from parent wasn't received, child thread crashes
-                							 			       // and parent should relaunch thread. Zoom, x and y are dummy and has no sense
-                							 			       // because they may have invalid value.
-                break;
-            }
+			// get tile batch id
+			void handleTileBatchId(string text, size_t batch_id)
+			{
+				if(text == newTileBatch)
+				{
+					current_batch_id = batch_id;
+				}
+			}
 
-            try 
-            {
-                version(none)
+			// get tile description to download
+			void handleTileRequest(size_t batch_id, uint x, uint y, uint zoom, string path, string url)
+			{
+				version(none)
                 {
                 	import std.random;
 	                auto i = uniform(0, 15);
 	                if(i == 10)
 	                	throw new Error("error imitation");
+	            }
+	            if(batch_id < current_batch_id)  // ignore tile of previous requests
+	            {
+	            	return;
 	            }
 
                 enum step = 256; // real size of tile in pixels
@@ -87,12 +79,20 @@ private:
 					
 					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 				}
-				frontend.send(cast(shared) tile);
-            }
-            catch(OwnerTerminated ot) 
+				parent.send(batch_id, cast(shared) tile);
+			}
+
+            try
             {
-                // normal exit
-                break;
+        	   	auto msg = receiveTimeout(dur!"msecs"(1),
+					&handleTileBatchId,
+					&handleTileRequest,
+					(OwnerTerminated ot)
+			        {
+			        	// normal exit
+			        	running = false;
+			        }
+				);
             }
             catch(Exception e) 
             {
@@ -104,10 +104,9 @@ private:
                 parent.send(thisTid, tileLoadingFailed, zoom, x, y);// this means that tile loading failed, child thread crashes
                 							 			 	   // and parent should relaunch thread with the specific zoom, 
                 							 			 	   // x and y values to try loading once again.
-                break;
+                running = false;
             }
         }
-		DerelictFI.unload();
 	}
 
 	static run(string url, string cache_path)
@@ -115,6 +114,8 @@ private:
 		enum maxWorkers = 32;
 	    Tid[maxWorkers] workers;
 	    uint current_worker;
+	    size_t current_batch_id;
+			            
 
 		auto frontend = receiveOnly!Tid();
 		enforce(frontend != Tid.init, "Wrong frontend tid.");
@@ -123,40 +124,14 @@ private:
 		{
 			// prepare workers
 	        foreach(i; 0..maxWorkers)
-	            workers[i] = spawnLinked(&downloading, thisTid, frontend); // anwers will be send to frontend immediatly
+	            workers[i] = spawnLinked(&downloading, thisTid); // anwers will be send to frontend immediatly
 			
-			uint zoom = 3;
-			if(zoom > 18)
-				zoom = 18;
-			if(zoom < 0)
-				zoom = 0;
-			uint n = pow(2, zoom);
-			
-			frontend.send("startTileSet", n * n); // start new tile set
-
-			foreach(uint y; 0..n)
-				foreach(uint x; 0..n)
-				{
-					auto current_tid = workers[current_worker];
-                    try
-					{
-						current_tid.send(zoom, x, y, cache_path, url);
-	                    current_worker++;
-	                    if(current_worker == maxWorkers)
-	                        current_worker = 0;
-					}
-					catch(LinkTerminated lt)
-					{
-						// just ignore it
-						debug writeln("Child terminated");
-					}
-				}
-
 			// talk to child threads
 	        bool msg; 
 	        bool running = true;
 	        do{     
 	            msg = receiveTimeout(dur!"msecs"(10),
+	            	// error message from childs
 	            	(Tid tid, string text, uint zoom, uint x, uint y)
 	            	{
 	            		debug writeln(text);
@@ -165,7 +140,7 @@ private:
 	            			foreach(uint i, w; workers)
 	            				if(w == tid)
 	            				{
-	            					workers[i] = spawnLinked(&downloading, thisTid, frontend);
+	            					workers[i] = spawnLinked(&downloading, thisTid);
 	            					debug writeln(childFailed, " received");
 	            					running = false;
 	            				}
@@ -175,18 +150,59 @@ private:
 							foreach(uint i, w; workers)
 	            				if(w == tid)
 	            				{	
-	            					workers[i] = spawnLinked(&downloading, thisTid, frontend);
+	            					workers[i] = spawnLinked(&downloading, thisTid);
 	            					workers[i].send(zoom, x, y, cache_path, url);
 	            					debug writeln(tileLoadingFailed, " received");
-	            					running = false;
 	            				}
 	            		}
 	            		else
 	            		{
 	            			debug stderr.writefln("Unknown type message is received from child:\ntext: %s, zoom: %d, x: %d, y: %d", text, zoom, x, y);
+						}
+					},
+					// get new tile batch id
+					(string text, size_t batch_id)
+					{
+						if(text == newTileBatch) 
+						{
+							current_batch_id = batch_id;
+							foreach(w; workers)
+            				{	
+            					w.prioritySend(newTileBatch, batch_id);
+            				}
+						}
+					},
+					/// handle request to (down)load tile image
+					(size_t batch_id, uint x, uint y, uint zoom)
+					{
+						if(batch_id < current_batch_id)  // ignore tile of previous requests
+			            {
+			            	return;
+			            }
+						// just to readress the request to one of workers
+						auto current_tid = workers[current_worker];
+	                    try
+						{
+							current_tid.send(batch_id, x, y, zoom, cache_path, url);
+		                    current_worker++;
+		                    if(current_worker == maxWorkers)
+		                        current_worker = 0;
+						}
+						catch(LinkTerminated lt)
+						{
+						// just ignore it
+						debug writeln("Child terminated");
 	            		}
 	            	},
-	            	(LinkTerminated lt)
+		            // collect results from workers
+	                (size_t batch_id, shared(Tile) shared_tile) {
+	                    if(batch_id != current_batch_id)  // ignore tile of other requests
+	                        return;
+	                    
+	                    // translate tile to frontend
+	                    frontend.send(batch_id, shared_tile);
+	                },
+	                (LinkTerminated lt)
 	            	{
 	            		debug writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Link terminated");
 	            	},
@@ -210,6 +226,8 @@ private:
 	}
 
 public:
+
+	enum newTileBatch = "new tile batch";
 
 	this(double lon, double lat, string url, string cache_path)
 	{

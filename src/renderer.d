@@ -70,7 +70,7 @@ private:
 	Shader program_;
 
 	immutable enum tileAmount = 1024;
-	uint downloading_total_; // total tiles to be downloaded
+	size_t downloading_total_; // total tiles to be downloaded
 	GLTile[] current_set_, // current tile set, that's being rendered
 		downloading_set_; // set of downloading tiles that after finishing will replace current tile set
 
@@ -135,8 +135,6 @@ public:
 
 	void draw(uint mouse_x, uint mouse_y)
 	{
-		camera.doScrolling(mouse_x, mouse_y);
-
 		auto matrix = camera.getModelViewMatrix();
 		/* Bind our modelmatrix variable to be a uniform called mvpmatrix in our shaderprogram */
       	glUniformMatrix4fv(glGetUniformLocation(program_, "mvpmatrix"), 1, GL_TRUE, matrix.value_ptr);
@@ -176,13 +174,15 @@ public:
 
 	/// make downloaded set null and
 	/// reserve place for it
-	void startTileset(uint amount)
+	void startTileset(size_t amount)
 	{
 		if(amount > tileAmount)
 		{
 			stderr.writefln("Too much tiles in set (max %s): %s", tileAmount, amount);
 			amount = tileAmount;
 		}
+		foreach(gltile; downloading_set_)
+			gltile.remove();
 		downloading_set_ = null;
 		downloading_total_ = amount;
 		downloading_set_.reserve(amount);
@@ -217,8 +217,6 @@ public:
 		gltile.texture.set_parameter(GL_TEXTURE_MAG_FILTER, GL_LINEAR);
         gltile.texture.set_parameter(GL_TEXTURE_WRAP_T, GL_CLAMP_TO_EDGE);
         gltile.texture.set_parameter(GL_TEXTURE_WRAP_S, GL_CLAMP_TO_EDGE);
-
-		auto offset = downloading_set_.length.to!int - 1;
 
 		gltile.vertices = new Buffer(tile.vertices);
 	    gltile.tex_coords = new Buffer(tile.tex_coords);

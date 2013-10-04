@@ -22,6 +22,7 @@ public:
 		auto tid = backend_.runAsync();
 		// notify backend what thread id the frontend has
 		tid.send(thisTid);
+		frontend_.backend = tid;
 		frontend_.run();
 	}
 

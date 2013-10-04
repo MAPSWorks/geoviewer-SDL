@@ -1,16 +1,20 @@
 module frontend;
 
 import std.conv: text;
-import std.concurrency: Tid, receiveTimeout, OwnerTerminated, Variant;
+import std.concurrency: thisTid, Tid, send, prioritySend, receiveTimeout, OwnerTerminated, Variant;
 import std.datetime: dur, StopWatch;
 import std.stdio: stderr, writeln, writefln;
+import std.exception: enforce;
+import std.traits: isUnsigned;
 import core.thread: Thread;
 
 import derelict.sdl2.sdl;
 import derelict.sdl2.image;
 import derelict.opengl3.gl3;
 
-import renderer;
+import renderer: Renderer;
+import tile: Tile, TileStorage;
+import backend: BackEnd;
 
 // Frontend receives user input from OS and sends it to backend,
 // receves from backend processed data and renders it
@@ -21,9 +25,20 @@ private:
 	SDL_Window* sdl_window_;
 	SDL_GLContext gl_context_;
 
+    Tid backend_;
+
+    TileStorage tile_storage_;
+
     uint mouse_x_, mouse_y_;
 
+    /// current requested tile batch id
+    size_t batch_id_;
+    static assert(isUnsigned!(typeof(batch_id_)), "batch_id_ shall have unsigned type!");               
+
 public:
+
+    @property backend() { return backend_; }
+    @property backend(Tid value) { backend_ = value; }
 
 	this(uint width, uint height)
 	{
@@ -60,6 +75,7 @@ public:
 	    DerelictGL3.reload();
 
 		renderer_ = new Renderer(width, height);
+        tile_storage_ = new TileStorage();
 	}
 
 	void close()
@@ -75,7 +91,14 @@ public:
 	void run()
 	{
         enum FRAMES_PER_SECOND = 60;
-        
+
+        enforce(backend != Tid.init);
+
+        // without delay messages can be missed by backend TODO: the reason isn't known
+        Thread.sleep(dur!"msecs"(100));
+        // init the first tile batch loading
+        requestNewTileBatch();
+                
         //The frame rate regulator
         StopWatch fps;
         while(true)
@@ -99,10 +122,33 @@ public:
             if( ( fps.peek.msecs < 1000 / FRAMES_PER_SECOND ) )
             {
                 //Sleep the remaining frame time
-                Thread.sleep(dur!"msecs"( (1000 / FRAMES_PER_SECOND) - fps.peek.msecs));
+                auto delay = (1000 / FRAMES_PER_SECOND) - fps.peek.msecs;
+                if(delay > 0)
+                    Thread.sleep(dur!"msecs"(delay));
             }
 		}
 	}
+
+    /// using camera defines tiles that are in camera frustum and therefore should be loaded
+    void requestNewTileBatch()
+    {
+        /// start loading new tile set using new camera view
+        /// id of request lets us to recognize different requests and skip old request data
+        /// if requests are generated too quickly (next before previous isn't finished)
+        auto viewable_tile_set = tile_storage_.getViewableTiles(renderer_.camera);
+        
+        renderer_.startTileset(viewable_tile_set.length);
+        
+        batch_id_++;  // intended integer overflow
+        
+        // send new tile batch id to let backend to skip old batches
+        backend_.prioritySend(BackEnd.newTileBatch, batch_id_);
+        foreach(tile; viewable_tile_set)
+        {
+            // request tile image from backend
+            backend_.send(batch_id_, tile.x, tile.y, tile.zoom);
+        }
+    }
 
 	bool processEvents()
 	{
@@ -145,7 +191,12 @@ public:
                         renderer_.camera.scrollingEnabled = true;
                     } else {
                         renderer_.camera.scrollingEnabled = false;
-                    }   
+                    } 
+
+                    if(renderer_.camera.doScrolling(mouse_x_, mouse_y_))
+                    {
+                        requestNewTileBatch();
+                    }
                 break; 
 	            case SDL_MOUSEBUTTONDOWN:
 	                break;    
@@ -171,14 +222,11 @@ public:
         bool msg;   
         do{     
             msg = receiveTimeout(dur!"usecs"(1),
-            	(string str, uint amount)
-            	{
-            		if(str == "startTileSet")
-            			renderer_.startTileset(amount);
-            		else
-            			stderr.writefln("Unknown message received by GUI thread: %s, %d", str, amount);
-            	},
-                (shared(Tile) shared_tile) {
+                // getting tiles from backend
+                (size_t batch_id, shared(Tile) shared_tile) {
+                    if(batch_id != batch_id_)  // ignore tile of other requests
+                        return;
+                    
                     auto tile = cast(Tile) shared_tile;
                     assert(tile !is null);
                     renderer_.setTile(tile);
@@ -187,7 +235,7 @@ public:
                     writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Owner terminated");
                 },
                 (Variant any) {
-                    stderr.writeln("Unknown message received by GUI thread: " ~ any.type.text);
+                    stderr.writeln("Unknown message received by frontend thread: " ~ any.type.text);
                 }   
             );
         } while(msg);

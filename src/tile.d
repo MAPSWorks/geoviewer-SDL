@@ -8,6 +8,7 @@ private {
     import std.file: exists, mkdirRecurse, dirName, read;
     import std.path: buildNormalizedPath, absolutePath;
     import std.net.curl: download;
+    import std.typecons: Tuple;
 
     import gl3n.linalg: vec3;
     import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
@@ -81,9 +82,32 @@ class Tile {
         int h = FreeImage_GetHeight(image);
      
         size_t size = FreeImage_GetPitch(image) * h;
-        ubyte[] pixels = FreeImage_GetBits(image)[0..size];
+        ubyte[] pixels;
+        pixels.length = size;
+        // copy data to our own buffer and free buffer that is owned by FreeImage
+        pixels[] = FreeImage_GetBits(image)[0..size];
+        FreeImage_Unload(image);
         auto tile = new Tile((float[]).init, (float[]).init, pixels, GL_RGB, w, h, GL_BGRA, GL_UNSIGNED_BYTE);
 
         return tile;
+    }
+}
+
+class TileStorage
+{
+    /// using camera creates list of tiles that 
+    /// are viewable from the camera at the moment
+    Tuple!(uint, "x", uint, "y", uint, "zoom")[] getViewableTiles(Camera)(Camera cam)
+    {
+        uint zoom = 3;
+        uint n = pow(2, zoom);
+        
+        Tuple!(uint, "x", uint, "y", uint, "zoom")[] result;
+        result.length = n * n;
+        foreach(uint y; 0..n)
+            foreach(uint x; 0..n)
+                result[y*n + x] = Tuple!(uint, "x", uint, "y", uint, "zoom")(x, y, zoom);
+
+        return result;
     }
 }

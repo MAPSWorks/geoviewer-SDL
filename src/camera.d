@@ -68,9 +68,10 @@ public:
 	final @property scrollingEnabled(bool value) { scrolling_enabled_ = value; }
 
 	/// moves camera according to mouse move
-	final void doScrolling(uint mouse_x, uint mouse_y) {
+	final bool doScrolling(uint mouse_x, uint mouse_y) {
 		static uint old_mouse_x, old_mouse_y;
-
+		auto changed = false;
+			
 		// if scrolling is enabled
 		if (scrolling_enabled_) {
 			// and marker coord is changed
@@ -88,10 +89,14 @@ public:
 				eyes_ = new_eyes;
 
 				computeModelViewMatrix();
+
+				changed = true;
 			}
 		}
 		old_mouse_x = mouse_x;
 		old_mouse_y = mouse_y;
+
+		return changed;
 	}
 
 	/// The function change the size of the viewport_ for example when window size changed
@@ -108,6 +113,8 @@ public:
 	{
 		return modelmatrix_;
 	}
+
+	@property eyes() { return eyes_; };
 }
 
 class Camera2D: Camera

@@ -5,10 +5,11 @@ import std.datetime: dur;
 import std.stdio: stderr, writeln, writefln;
 import std.exception: enforce;
 import std.conv: text;
+import std.math: pow;
 
 import derelict.freeimage.freeimage: DerelictFI;
 
-import tile;
+import tile: Tile, tile2world;
 
 // backend получает от фронтенда пользовательский ввод, обрабатывает данные
 // в соотвествии с бизнес-логикой и отправляет их фронтенду
@@ -30,7 +31,7 @@ private:
 		
 		while(running)
         {
-        	uint zoom, x, y;
+        	int zoom, x, y;
             string path, url;
 
 			// get tile batch id
@@ -43,7 +44,7 @@ private:
 			}
 
 			// get tile description to download
-			void handleTileRequest(size_t batch_id, uint x, uint y, uint zoom, string path, string url)
+			void handleTileRequest(size_t batch_id, int x, int y, int zoom, string path, string url)
 			{
 				version(none)
                 {
@@ -65,17 +66,21 @@ private:
 				with(tile)
 				{
 					vertices.length = 8;
-					vertices[0] = -level_size / 2 + x*step + 0; 
-					vertices[1] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
+					auto w = tile2world(x + 0, y + 0, zoom);
+					vertices[0] = w.x; 
+					vertices[1] = w.y; 
 
-					vertices[2] = -level_size / 2 + x*step + step; 
-					vertices[3] = level_size / 4 /*probably should be just step?*/ - y*step + step; 
+					w = tile2world(x + 1, y + 0, zoom);
+					vertices[2] = w.x; 
+					vertices[3] = w.y; 
 
-					vertices[4] = -level_size / 2 + x*step + 0; 
-					vertices[5] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
+					w = tile2world(x + 0, y + 1, zoom);
+					vertices[4] = w.x;  
+					vertices[5] = w.y;  
 
-					vertices[6] = -level_size / 2 + x*step + step; 
-					vertices[7] = level_size / 4 /*probably should be just step?*/ - y*step + 0; 
+					w = tile2world(x + 1, y + 1, zoom);
+					vertices[6] = w.x; 
+					vertices[7] = w.y; 
 					
 					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 				}
@@ -132,7 +137,7 @@ private:
 	        do{     
 	            msg = receiveTimeout(dur!"msecs"(10),
 	            	// error message from childs
-	            	(Tid tid, string text, uint zoom, uint x, uint y)
+	            	(Tid tid, string text, int zoom, int x, int y)
 	            	{
 	            		debug writeln(text);
 	            		if(text == childFailed)
@@ -173,7 +178,7 @@ private:
 						}
 					},
 					/// handle request to (down)load tile image
-					(size_t batch_id, uint x, uint y, uint zoom)
+					(size_t batch_id, int x, int y, int zoom)
 					{
 						if(batch_id < current_batch_id)  // ignore tile of previous requests
 			            {

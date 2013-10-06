@@ -4,17 +4,19 @@ private {
     import std.string: toStringz, text;
     import std.exception: enforce;
     import std.conv: to;
-    import std.math: PI, atan, sinh, pow;
+    import std.math: PI, atan, sinh, pow, log, tan, cos;
     import std.file: exists, mkdirRecurse, dirName, read;
     import std.path: buildNormalizedPath, absolutePath;
     import std.net.curl: download;
     import std.typecons: Tuple;
 
-    import gl3n.linalg: vec3;
+    import gl3n.linalg: vec3d;
     import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
     import derelict.freeimage.freeimage: FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
                 FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits;
 }
+
+immutable tileSize = 256;
 
 class Tile {
 	float[] tex_coords;
@@ -36,19 +38,6 @@ class Tile {
     	this.height = height;
     	this.format = format;
     	this.type = type;
-    }
-
-    static vec3 tileToGeodetic(vec3 tile) // lon, lat, zoom
-    {
-        uint zoom = to!uint(tile.z);
-        double n = PI*(1 - 2.0 * tile.y / pow(2, zoom));
-
-        vec3 geo;
-        geo.x = to!double(tile.x * 360 / pow(2, zoom) - 180.0);
-        geo.y = to!double(180.0 / PI * atan(sinh(n)));
-        geo.z = zoom;
-
-        return geo;
     }
 
     static string downloadTile(uint zoom, uint tilex, uint tiley, string url, string local_path)
@@ -93,20 +82,121 @@ class Tile {
     }
 }
 
+/**
+ * geo.x - tile longitude
+ * geo.y - tile latitude
+ * geo.z - tile zoom
+ */
+auto geodetic2tile(vec3d geo) {
+    vec3d t;
+    int zoom = to!int(geo.z);
+    t.x = to!double((geo.x + 180.0) / 360.0 * (1 << zoom));
+    t.y = to!double((1.0 - log(tan(geo.y * PI / 180.0) + 
+                                       1.0 / cos(geo.y * PI / 180.0)) / PI) / 2.0 * (1 << zoom));
+    t.z = zoom;
+    
+    return t;
+}
+
+auto geodetic2tile(double lon, double lat, double zoom)
+{
+    auto geo = vec3d(lon, lat, zoom);
+    return geodetic2tile(geo);
+}
+
+unittest {
+    auto right_answer = vec3d(15, 4, 4);
+    auto test_value = geodetic2tile(177, 65, 4); // Анадырь
+    test_value.x = test_value.x.to!uint;
+    test_value.y = test_value.y.to!uint;
+    assert(right_answer == test_value, test_value.text);
+
+    right_answer = vec3d(1, 4, 4);
+    test_value = geodetic2tile(-150, 61, 4); // Anchorage
+    test_value.x = test_value.x.to!uint;
+    test_value.y = test_value.y.to!uint;
+    assert(right_answer == test_value, test_value.text);
+}
+
+/**
+ * tile.x - tile x
+ * tile.y - tile y
+ * tile.z - tile zoom
+ */
+auto tile2geodetic(vec3d tile) // lon, lat, zoom
+{
+    auto zoom = to!int(tile.z);
+    double n = PI*(1 - 2.0 * tile.y / pow(2, zoom));
+
+    vec3d geo;
+    geo.x = to!double(tile.x * 360 / pow(2, zoom) - 180.0);
+    geo.y = to!double(180.0 / PI * atan(sinh(n)));
+    geo.z = zoom;
+
+    return geo;
+}
+
+auto tile2geodetic(double tile_x, double tile_y, double zoom) 
+{
+    auto tile = vec3d(tile_x, tile_y, zoom);
+    return tile2geodetic(tile);
+}
+
+/**
+* Преобразует координаты тайла в мировые координаты (2D)
+*
+*/
+auto tile2world(vec3d xyz)
+{
+    auto n = pow(2, xyz.z.to!int);
+    
+    auto x = xyz.x * tileSize;
+    auto y = (/*n - */xyz.y) * tileSize;  // invert y
+    auto z = 0; // 2D
+
+    return vec3d(x, y, z);
+}
+
+auto tile2world(double tile_x, double tile_y, double zoom)
+{
+    return tile2world(vec3d(tile_x, tile_y, zoom));
+}
+
+/**
+* Преобразует мировые координаты в тайловые с зумом zoom
+* (zoom не участвует в преобразовании и напрямую передается
+* в результат)
+*/
+auto world2tile(vec3d xyz)
+{
+    auto zoom = xyz.z.to!int;
+    auto n = pow(2, zoom);
+    
+    auto tile_x = xyz.x / tileSize;
+    auto tile_y = xyz.y / tileSize;
+
+    return vec3d(tile_x, /*n - */tile_y, zoom); // invert y
+}
+
+auto world2tile(double x, double y, double z)
+{
+    return world2tile(vec3d(x, y, z));
+}
+
 class TileStorage
 {
     /// using camera creates list of tiles that 
     /// are viewable from the camera at the moment
-    Tuple!(uint, "x", uint, "y", uint, "zoom")[] getViewableTiles(Camera)(Camera cam)
+    Tuple!(int, "x", int, "y", int, "zoom")[] getViewableTiles(Camera)(Camera cam)
     {
-        uint zoom = 3;
-        uint n = pow(2, zoom);
+        int zoom = 3;
+        int n = pow(2, zoom);
         
-        Tuple!(uint, "x", uint, "y", uint, "zoom")[] result;
+        Tuple!(int, "x", int, "y", int, "zoom")[] result;
         result.length = n * n;
         foreach(uint y; 0..n)
             foreach(uint x; 0..n)
-                result[y*n + x] = Tuple!(uint, "x", uint, "y", uint, "zoom")(x, y, zoom);
+                result[y*n + x] = Tuple!(int, "x", int, "y", int, "zoom")(x, y, zoom);
 
         return result;
     }

@@ -1,6 +1,6 @@
 module frontend;
 
-import std.conv: text;
+import std.conv: text, to;
 import std.concurrency: thisTid, Tid, send, prioritySend, receiveTimeout, OwnerTerminated, Variant;
 import std.datetime: dur, StopWatch;
 import std.stdio: stderr, writeln, writefln;
@@ -13,7 +13,7 @@ import derelict.sdl2.image;
 import derelict.opengl3.gl3;
 
 import renderer: Renderer;
-import tile: Tile, TileStorage;
+import tile: Tile, TileStorage, world2tile, tile2geodetic;
 import backend: BackEnd;
 
 // Frontend receives user input from OS and sends it to backend,
@@ -187,6 +187,9 @@ public:
                     mouse_x_ = event.motion.x;
                     mouse_y_ = event.motion.y;
 
+                    auto g = renderer_.camera.mouse2world(mouse_x_, mouse_y_, 0).world2tile.tile2geodetic;
+                    writefln("geodetic: %s", g);
+                    
                     if (event.motion.state & SDL_BUTTON_RMASK) {
                         renderer_.camera.scrollingEnabled = true;
                     } else {

@@ -6,6 +6,7 @@ import std.stdio: writeln, writefln, stderr;
 import std.exception: enforce;
 import std.range: iota;
 import std.array: array;
+import std.math: pow;
 
 import derelict.sdl2.sdl: SDL_GetError;
 import derelict.opengl3.gl3;
@@ -13,8 +14,9 @@ import glamour.vao: VAO;
 import glamour.shader: Shader;
 import glamour.vbo: Buffer, ElementBuffer;
 import glamour.texture: Texture2D;
+import gl3n.linalg: vec3d;
 
-import tile: Tile;
+import tile: Tile, tileSize;
 import camera: Camera, Camera2D, Camera3D;
 
 // class describing slippy tile from opengl point of view
@@ -128,7 +130,9 @@ public:
 	 	program_.bind();
 	    position_ = program_.get_attrib_location("in_position");
 	    tex_coord_ = program_.get_attrib_location("in_coord");
-	    camera_2d_ = new Camera2D(width, height, width); // set world width equals to window width, i.e. one pixel == one degredd
+	    camera_2d_ = new Camera2D(width, height, width); // set world width equals to window width
+	    auto center = tileSize*pow(2, camera_2d_.zoom)/2;
+	    camera_2d_.eyes = vec3d(center, center, 1); // set camera to the center
 	    camera_3d_ = new Camera3D(width, height, 1.0);
 	    camera_mode_ = CameraMode.mode2D;
 	}

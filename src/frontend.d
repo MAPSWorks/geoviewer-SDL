@@ -207,9 +207,15 @@ public:
                     if(event.wheel.y)
                     {
                         if (event.wheel.y > 0)
+                        {
                             renderer_.camera.multiplyScale(.975);
+                            requestNewTileBatch();
+                        }
                         else
+                        {   
                             renderer_.camera.multiplyScale(1.025);
+                            requestNewTileBatch();
+                        }
                     }
                     break;
                 default:

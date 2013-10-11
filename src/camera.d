@@ -130,6 +130,8 @@ public:
 	@property zoom() { return zoom_; }
 	@property eyes() { return eyes_; }
 	@property eyes(vec3d eyes) { eyes_ = eyes; computeModelViewMatrix(); }
+	@property viewportHeight() { return viewport_height_; }
+	@property viewportWidth() { return viewport_width_; }
 }
 
 class Camera2D: Camera

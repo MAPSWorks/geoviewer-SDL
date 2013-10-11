@@ -13,7 +13,7 @@ import derelict.sdl2.image;
 import derelict.opengl3.gl3;
 
 import renderer: Renderer;
-import tile: Tile, TileStorage, world2tile, tile2geodetic;
+import tile: Tile, world2tile, tile2geodetic;
 import backend: BackEnd;
 
 // Frontend receives user input from OS and sends it to backend,
@@ -26,8 +26,6 @@ private:
 	SDL_GLContext gl_context_;
 
     Tid backend_;
-
-    TileStorage tile_storage_;
 
     uint mouse_x_, mouse_y_;
 
@@ -75,7 +73,6 @@ public:
 	    DerelictGL3.reload();
 
 		renderer_ = new Renderer(width, height);
-        tile_storage_ = new TileStorage();
 	}
 
 	void close()
@@ -135,7 +132,7 @@ public:
         /// start loading new tile set using new camera view
         /// id of request lets us to recognize different requests and skip old request data
         /// if requests are generated too quickly (next before previous isn't finished)
-        auto viewable_tile_set = tile_storage_.getViewableTiles(renderer_.camera);
+        auto viewable_tile_set = renderer_.camera.getViewableTiles();
         
         renderer_.startTileset(viewable_tile_set.length);
         

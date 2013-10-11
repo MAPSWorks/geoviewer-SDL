@@ -1,6 +1,8 @@
 module camera;
 
 import std.typecons: Tuple;
+import std.math: pow, round;
+import std.conv: to;
 
 import derelict.opengl3.gl3: glViewport;
 import gl3n.linalg: vec3, vec3d, mat4;
@@ -46,6 +48,8 @@ public:
 
 	abstract vec3d mouse2world(vec3d xy);
 	abstract vec3d world2mouse(vec3d xyz);
+
+	abstract Tuple!(int, "x", int, "y", int, "zoom")[] getViewableTiles();
 
 	// for convenience
 	vec3d mouse2world(double x, double y, double zoom)
@@ -179,6 +183,40 @@ public:
 	{
 		assert(0);
 	}
+
+	/// using camera creates list of tiles that 
+    /// are viewable from the camera at the moment
+    override Tuple!(int, "x", int, "y", int, "zoom")[] getViewableTiles()
+    {
+        auto left_top = super.mouse2world(0., 0., 0.).world2tile;
+        auto right_bottom = super.mouse2world(viewportWidth, viewportHeight, 0.).world2tile;
+
+        int n = pow(2, zoom);
+        
+        Tuple!(int, "x", int, "y", int, "zoom")[] result;
+
+        auto x_left = (left_top.x - 1).round.to!int;
+        auto x_right = right_bottom.x.to!int + 1;
+        auto y_top = (left_top.y - 1).round.to!int;
+        auto y_bottom = right_bottom.y.to!int + 1;
+        
+        assert((x_right - x_left) > 0, "right coordinate should be greater than left one");
+        assert((y_bottom - y_top) > 0, "bottom coordinate should be greater than top one");
+        result.length = (x_right - x_left)*(y_bottom - y_top);
+        
+        int i;
+        foreach(x; x_left..x_right)
+        {
+            foreach(y; y_top..y_bottom)
+            {
+                if(y>=0 && y < n)
+                    result[i++] = Tuple!(int, "x", int, "y", int, "zoom")(x, y, zoom);
+            }
+        }
+        result.length = i;
+
+        return result;
+    }
 }
 
 alias Camera2D Camera3D;

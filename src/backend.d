@@ -6,6 +6,8 @@ import std.stdio: stderr, writeln, writefln;
 import std.exception: enforce;
 import std.conv: text;
 import std.math: pow;
+import std.container: DList;
+import std.typecons: Tuple;
 
 import derelict.freeimage.freeimage: DerelictFI;
 
@@ -120,8 +122,12 @@ private:
 	    Tid[maxWorkers] workers;
 	    uint current_worker;
 	    size_t current_batch_id;
-	    shared(Tile)[int][int][int] tile_cache;
-			            
+	    shared(Tile)[int][int][int] tile_cache;  // x, y, zoom
+	    
+	    alias Tuple!(int, "x", int, "y", int, "zoom") TileDescription;
+		DList!TileDescription tile_cache_content; // list of tile that cache contains
+		size_t tile_cache_size; // current size of tile cache
+		enum maxTileCacheSize = 256;
 
 		auto frontend = receiveOnly!Tid();
 		enforce(frontend != Tid.init, "Wrong frontend tid.");
@@ -228,6 +234,20 @@ private:
 	                    if(y !in tile_cache[x])
 	                    	tile_cache[x][y] = (shared(Tile)[int]).init;
 	                    tile_cache[x][y][zoom] = shared_tile;
+	                    
+	                    tile_cache_content.insertFront(TileDescription(x, y, zoom));
+	                    tile_cache_size++;
+	                    if(tile_cache_size > maxTileCacheSize)
+	                    {
+	                    	enum tileAmountToFree = 64;
+	                    	foreach(i; 0..tileAmountToFree)
+	                    	{
+	                    		auto description = tile_cache_content.back;
+	                    		tile_cache[description.x][description.y][description.zoom] = null;
+	                    		tile_cache_content.removeBack();
+	                    	}
+	                    	tile_cache_size -= tileAmountToFree;
+		                }
 
 	                    // translate tile to frontend
 	                    frontend.send(batch_id, shared_tile);

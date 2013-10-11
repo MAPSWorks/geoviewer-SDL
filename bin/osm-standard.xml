@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<settings>
-  <cache_path>./cache/OSM-standard</cache_path>
-  <tile_url>http://b.tile.openstreetmap.org/</tile_url>
-  <initlat>50.1</initlat>
-  <initlon>138.5</initlon>
-  <width>1024</width>
-  <height>768</height>
-</settings>

@@ -1,9 +1,0 @@
-<?xml version="1.0" encoding="utf-8"?>
-<settings>
-  <cache_path>./cache/OSM-no-label</cache_path>
-  <tile_url>http://a.www.toolserver.org/tiles/osm-no-labels/</tile_url>
-  <initlat>50.1</initlat>
-  <initlon>138.5</initlon>
-  <width>1366</width>
-  <height>768</height>
-</settings>

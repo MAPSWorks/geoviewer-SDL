@@ -22,7 +22,6 @@
 	"dependencies": {
 		"gl3n": "~master",
 		"glamour": "~master",
-		"arsd": "~master",
 		"derelict": "~master"
 	}
 }

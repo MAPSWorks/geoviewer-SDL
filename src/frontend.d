@@ -182,8 +182,8 @@ public:
                     mouse_x_ = event.motion.x;
                     mouse_y_ = event.motion.y;
 
-                    auto g = renderer_.camera.mouse2world(mouse_x_, mouse_y_, 0).world2tile.tile2geodetic;
-                    writefln("geodetic: %s", g);
+                    //auto g = renderer_.camera.mouse2world(mouse_x_, mouse_y_, 0).world2tile.tile2geodetic;
+                    //writefln("geodetic: %s", g);
                     
                     if (event.motion.state & SDL_BUTTON_RMASK) {
                         renderer_.camera.scrollingEnabled = true;

@@ -244,7 +244,7 @@ public:
 
         downloading_set_ ~= gltile;
 
-        writefln("downloaded: %3.2f %%", downloading_set_.length*100/downloading_total_.to!float);
+        //writefln("downloaded: %3.2f %%", downloading_set_.length*100/downloading_total_.to!float);
 
         if(downloading_set_.length == downloading_total_)
         	finishTileset();

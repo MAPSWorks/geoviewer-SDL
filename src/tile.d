@@ -44,8 +44,8 @@ class Tile {
     {
         // wrap tile x, y
         auto n = pow(2, zoom);
-        tilex = tilex % n; while(tilex < 0) tilex += n;
-        tiley = tiley % n; while(tiley < 0) tiley += n;
+        tilex = tilex % n;
+        tiley = tiley % n;
 
         string absolute_path = absolutePath(local_path);
         auto filename = tiley.text ~ ".png";

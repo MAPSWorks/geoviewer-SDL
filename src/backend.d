@@ -84,7 +84,7 @@ private:
 					
 					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 				}
-				parent.send(batch_id, cast(shared) tile);
+				parent.send(batch_id, cast(shared) tile, x, y, zoom);
 			}
 
             try
@@ -120,6 +120,7 @@ private:
 	    Tid[maxWorkers] workers;
 	    uint current_worker;
 	    size_t current_batch_id;
+	    shared(Tile)[int][int][int] tile_cache;
 			            
 
 		auto frontend = receiveOnly!Tid();
@@ -184,7 +185,24 @@ private:
 			            {
 			            	return;
 			            }
-						// just to readress the request to one of workers
+
+			            // check cache for given tile
+			            shared(Tile) shared_tile;
+			            auto layerx = tile_cache.get(x, null);
+			            if(layerx !is null)
+			            {
+			            	auto layerxy = layerx.get(y, null);
+			            	if(layerxy !is null)
+			            		shared_tile = layerxy.get(zoom, null);
+			            }
+			            // if given tile found send it and quit
+			            if(shared_tile !is null)
+			            {
+							frontend.send(batch_id, shared_tile);
+			            	return;
+			            }
+
+						// if tile not found readress the request to one of workers
 						auto current_tid = workers[current_worker];
 	                    try
 						{
@@ -195,15 +213,22 @@ private:
 						}
 						catch(LinkTerminated lt)
 						{
-						// just ignore it
-						debug writeln("Child terminated");
+							// just ignore it
+							debug writeln("Child terminated");
 	            		}
 	            	},
 		            // collect results from workers
-	                (size_t batch_id, shared(Tile) shared_tile) {
+	                (size_t batch_id, shared(Tile) shared_tile, int x, int y, int zoom) {
 	                    if(batch_id != current_batch_id)  // ignore tile of other requests
 	                        return;
 	                    
+	                    // store given tile into cache
+	                    if(x !in tile_cache)
+	                    	tile_cache[x] = (shared(Tile)[int][int]).init;
+	                    if(y !in tile_cache[x])
+	                    	tile_cache[x][y] = (shared(Tile)[int]).init;
+	                    tile_cache[x][y][zoom] = shared_tile;
+
 	                    // translate tile to frontend
 	                    frontend.send(batch_id, shared_tile);
 	                },

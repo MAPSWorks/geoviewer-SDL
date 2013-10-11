@@ -63,7 +63,25 @@ private:
                 enum step = 256; // real size of tile in pixels
 				double level_size = step * pow(2, zoom); // all tiles of the level with current zoom will take this amount of pixels
 
-                string tile_path = Tile.downloadTile(zoom, x, y, url, path);
+                string tile_path;
+                auto count = 0;
+                // try to download five times
+                do
+                {
+                	try
+                	{
+                		tile_path = Tile.downloadTile(zoom, x, y, url, path);
+                		break;
+                	}
+                	catch(Exception e)
+                	{
+                		debug writefln("%s. Retrying %d time...", e.msg, count);
+                		count++;
+                	}
+                } while(count < 5);
+
+                debug if(count >= 5) writeln("downloading failure");
+
 				auto tile = Tile.loadFromPng(tile_path);
 				with(tile)
 				{

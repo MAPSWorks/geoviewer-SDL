@@ -9,7 +9,6 @@ import std.traits: isUnsigned;
 import core.thread: Thread;
 
 import derelict.sdl2.sdl;
-import derelict.sdl2.image;
 import derelict.opengl3.gl3;
 
 import renderer: Renderer;
@@ -41,7 +40,6 @@ public:
 	this(uint width, uint height)
 	{
 		DerelictSDL2.load();
-		DerelictSDL2Image.load();
 	    DerelictGL3.load();
 
 	    if (SDL_Init(SDL_INIT_VIDEO) < 0)

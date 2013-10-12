@@ -61,7 +61,7 @@ public:
 
 	alias camera this;
 }
-		
+
 class Renderer : RendererWithCamera
 {
 private:
@@ -105,17 +105,17 @@ private:
 /*
 uniform int multiplicationFactor = 8;
 		uniform float threshold = 0.1;
-		 
+
 		in vec2 texCoord;
 		out vec4 colorOut;
-		 
+
 		void main() {
 		    // multiplicationFactor scales the number of stripes
 		    vec2 t = texCoord * multiplicationFactor ;
-		 
+
 		    // the threshold constant defines the with of the lines
 		    if (fract(t.s) < threshold  || fract(t.t) < threshold )
-		        colorOut = vec4(0.0, 0.0, 1.0, 1.0);   
+		        colorOut = vec4(0.0, 0.0, 1.0, 1.0);
 		    else
 		        discard;
 		}
@@ -213,7 +213,7 @@ public:
 		enforce(tile);
 		auto gltile = new GLTile();
 		gltile.vao = new VAO();
-		
+
 		// create texture using tile data
 		gltile.texture = new Texture2D();
 		with(tile) gltile.texture.set_data(data, internal_format, tile.width, height, format, type);
@@ -228,13 +228,13 @@ public:
 
 	    // start compiling to VAO
 	    gltile.vao.bind();
-	    
+
 		gltile.vertices.bind();
-        glEnableVertexAttribArray(position_);     
+        glEnableVertexAttribArray(position_);
 		glVertexAttribPointer(position_, 2, GL_FLOAT, GL_FALSE, 0, null);
 
         gltile.indices.bind();
-        
+
         gltile.tex_coords.bind();
         glEnableVertexAttribArray(tex_coord_);
         glVertexAttribPointer(tex_coord_, 2, GL_FLOAT, GL_FALSE, 0, null);

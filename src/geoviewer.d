@@ -14,7 +14,7 @@ public:
 	this(uint width, uint height, double lon, double lat, string url, string cache_path)
 	{
 		backend_ = new BackEnd(lon, lat, url, cache_path);
-		frontend_ = new FrontEnd(width, height);		
+		frontend_ = new FrontEnd(width, height);
 	}
 
 	void run()

@@ -87,17 +87,17 @@ public:
 	final bool doScrolling(uint mouse_x, uint mouse_y) {
 		static uint old_mouse_x, old_mouse_y;
 		auto changed = false;
-			
+
 		// if scrolling is enabled
 		if (scrolling_enabled_) {
 			// and marker coord is changed
-			if ((mouse_x != old_mouse_x) || (mouse_y != old_mouse_y)) 
+			if ((mouse_x != old_mouse_x) || (mouse_y != old_mouse_y))
 			{
 				// calculate old marker coordinates using old mouse coordinates
 				auto old_position = mouse2world( old_mouse_x, old_mouse_y, zoom_ );
-				
+
 				auto current_position = mouse2world( mouse_x, mouse_y, zoom_ );
-				
+
 				// correct current globe states using difference tween old and new marker coordinates
 				vec3d new_eyes;
 				new_eyes.x = eyes_.x - (current_position.x - old_position.x);
@@ -125,8 +125,8 @@ public:
 		aspect_ratio_ = cast(double) viewport_width_/viewport_height_;
 		computeModelViewMatrix();
 	}
-	
-	final mat4 getModelViewMatrix() 
+
+	final mat4 getModelViewMatrix()
 	{
 		return modelmatrix_;
 	}
@@ -184,7 +184,7 @@ public:
 		assert(0);
 	}
 
-	/// using camera creates list of tiles that 
+	/// using camera creates list of tiles that
     /// are viewable from the camera at the moment
     override Tuple!(int, "x", int, "y", int, "zoom")[] getViewableTiles()
     {
@@ -192,18 +192,18 @@ public:
         auto right_bottom = super.mouse2world(viewportWidth, viewportHeight, 0.).world2tile;
 
         int n = pow(2, zoom);
-        
+
         Tuple!(int, "x", int, "y", int, "zoom")[] result;
 
         auto x_left = (left_top.x - 1).round.to!int;
         auto x_right = right_bottom.x.to!int + 1;
         auto y_top = (left_top.y - 1).round.to!int;
         auto y_bottom = right_bottom.y.to!int + 1;
-        
+
         assert((x_right - x_left) > 0, "right coordinate should be greater than left one");
         assert((y_bottom - y_top) > 0, "bottom coordinate should be greater than top one");
         result.length = (x_right - x_left)*(y_bottom - y_top);
-        
+
         int i;
         foreach(x; x_left..x_right)
         {

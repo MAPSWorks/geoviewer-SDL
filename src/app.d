@@ -6,7 +6,7 @@ import geoviewer: Geoviewer;
 import settings: Settings;
 
 int main(string[] args)
-{ 
+{
 	if(args.length < 2)
 	{
 		writeln(
@@ -29,7 +29,7 @@ int main(string[] args)
 	}
 
 	// read config
-	
+
 	// initial coordinates of camera
 	double lon = settings.get!(double, "initlon");
 	assert(lon >= -180 && lon <= 180, "longitude must be in range [-180, 180]");

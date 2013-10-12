@@ -21,10 +21,10 @@ immutable tileSize = 256;
 class Tile {
 	float[] tex_coords;
 	float[] vertices;
-	GLint internal_format; 
-	GLsizei width; 
+	GLint internal_format;
+	GLsizei width;
 	GLsizei height;
-    GLenum format; 
+    GLenum format;
     GLenum type;
     ubyte[] data;
 
@@ -56,7 +56,7 @@ class Tile {
             //trying to download from openstreet map
             auto dir = dirName(full_path);
             if(!exists(dir))
-                mkdirRecurse(dir); // creating directories may be thread unsafe if different threads try to create the same dir or different dirs that belong 
+                mkdirRecurse(dir); // creating directories may be thread unsafe if different threads try to create the same dir or different dirs that belong
                                    // to the single parent dir that also is created by these threads. it's better to create dirs in one parent thread or you
                                    // should ensure there won't be collisions.
             .download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
@@ -66,16 +66,16 @@ class Tile {
     }
 
     static Tile loadFromPng(string filename) {
-        
+
         auto img_fmt = FreeImage_GetFileType(filename.toStringz, 0);
         auto original = FreeImage_Load(img_fmt, filename.toStringz, 0);
-     
+
         auto image = FreeImage_ConvertTo32Bits(original);
         FreeImage_Unload(original);
-     
+
         int w = FreeImage_GetWidth(image);
         int h = FreeImage_GetHeight(image);
-     
+
         size_t size = FreeImage_GetPitch(image) * h;
         ubyte[] pixels;
         pixels.length = size;
@@ -97,10 +97,10 @@ auto geodetic2tile(vec3d geo) {
     vec3d t;
     int zoom = to!int(geo.z);
     t.x = to!double((geo.x + 180.0) / 360.0 * (1 << zoom));
-    t.y = to!double((1.0 - log(tan(geo.y * PI / 180.0) + 
+    t.y = to!double((1.0 - log(tan(geo.y * PI / 180.0) +
                                        1.0 / cos(geo.y * PI / 180.0)) / PI) / 2.0 * (1 << zoom));
     t.z = zoom;
-    
+
     return t;
 }
 
@@ -142,7 +142,7 @@ auto tile2geodetic(vec3d tile) // lon, lat, zoom
     return geo;
 }
 
-auto tile2geodetic(double tile_x, double tile_y, double zoom) 
+auto tile2geodetic(double tile_x, double tile_y, double zoom)
 {
     auto tile = vec3d(tile_x, tile_y, zoom);
     return tile2geodetic(tile);

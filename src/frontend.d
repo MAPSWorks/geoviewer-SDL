@@ -30,7 +30,7 @@ private:
 
     /// current requested tile batch id
     size_t batch_id_;
-    static assert(isUnsigned!(typeof(batch_id_)), "batch_id_ shall have unsigned type!");               
+    static assert(isUnsigned!(typeof(batch_id_)), "batch_id_ shall have unsigned type!");
 
 public:
 
@@ -44,7 +44,7 @@ public:
 
 	    if (SDL_Init(SDL_INIT_VIDEO) < 0)
 	        throw new Exception("Failed to initialize SDL: " ~ SDL_GetError().text);
-	    
+
 	    scope(failure) SDL_Quit();
 
 	    // Set OpenGL version
@@ -59,12 +59,12 @@ public:
 	        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
 	        width, height, SDL_WINDOW_OPENGL | SDL_WINDOW_SHOWN);
 
-	    if (!sdl_window_) 
+	    if (!sdl_window_)
 	    	throw new Exception("Failed to create a SDL window: " ~ SDL_GetError().text);
 	    scope(failure) SDL_DestroyWindow(sdl_window_);
 
 	    gl_context_ = SDL_GL_CreateContext(sdl_window_);
-	    if (gl_context_ is null) 
+	    if (gl_context_ is null)
 	    	throw new Exception("Failed to create a OpenGL context: " ~ SDL_GetError().text);
 	    scope(failure) SDL_GL_DeleteContext(gl_context_);
 
@@ -93,7 +93,7 @@ public:
         Thread.sleep(dur!"msecs"(100));
         // init the first tile batch loading
         requestNewTileBatch();
-                
+
         //The frame rate regulator
         StopWatch fps;
         while(true)
@@ -102,13 +102,13 @@ public:
             fps.reset();
             fps.start();
 
-            // process events from OS, if result is 
+            // process events from OS, if result is
 			// false then break loop
 			if(!processEvents())
 				break;
 			// process messages from BackEnd
 			receiveMsg();
-			// draw result of processing events and 
+			// draw result of processing events and
 			// receiving messages
 			renderer_.draw(mouse_x_, mouse_y_);
 
@@ -131,11 +131,11 @@ public:
         /// id of request lets us to recognize different requests and skip old request data
         /// if requests are generated too quickly (next before previous isn't finished)
         auto viewable_tile_set = renderer_.camera.getViewableTiles();
-        
+
         renderer_.startTileset(viewable_tile_set.length);
-        
+
         batch_id_++;  // intended integer overflow
-        
+
         // send new tile batch id to let backend to skip old batches
         backend_.prioritySend(BackEnd.newTileBatch, batch_id_);
         foreach(tile; viewable_tile_set)
@@ -175,29 +175,29 @@ public:
                 			break;
                 		case SDLK_LEFT:
                 			break;
-                		default:{}	
+                		default:{}
                 	}
-                	break;	
+                	break;
 	            case SDL_MOUSEMOTION:
                     mouse_x_ = event.motion.x;
                     mouse_y_ = event.motion.y;
 
                     //auto g = renderer_.camera.mouse2world(mouse_x_, mouse_y_, 0).world2tile.tile2geodetic;
                     //writefln("geodetic: %s", g);
-                    
+
                     if (event.motion.state & SDL_BUTTON_RMASK) {
                         renderer_.camera.scrollingEnabled = true;
                     } else {
                         renderer_.camera.scrollingEnabled = false;
-                    } 
+                    }
 
                     if(renderer_.camera.doScrolling(mouse_x_, mouse_y_))
                     {
                         requestNewTileBatch();
                     }
-                break; 
+                break;
 	            case SDL_MOUSEBUTTONDOWN:
-	                break;    
+	                break;
                 case SDL_MOUSEWHEEL:
                     if(event.wheel.y)
                     {
@@ -207,7 +207,7 @@ public:
                             requestNewTileBatch();
                         }
                         else
-                        {   
+                        {
                             renderer_.camera.multiplyScale(1.025);
                             requestNewTileBatch();
                         }
@@ -223,14 +223,14 @@ public:
     void receiveMsg()
     {
 		// talk to logic thread
-        bool msg;   
-        do{     
+        bool msg;
+        do{
             msg = receiveTimeout(dur!"usecs"(1),
                 // getting tiles from backend
                 (size_t batch_id, shared(Tile) shared_tile) {
                     if(batch_id != batch_id_)  // ignore tile of other requests
                         return;
-                    
+
                     auto tile = cast(Tile) shared_tile;
                     assert(tile !is null);
                     renderer_.setTile(tile);
@@ -240,7 +240,7 @@ public:
                 },
                 (Variant any) {
                     stderr.writeln("Unknown message received by frontend thread: " ~ any.type.text);
-                }   
+                }
             );
         } while(msg);
     }

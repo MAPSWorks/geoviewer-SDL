@@ -30,7 +30,7 @@ private:
 		scope(exit) DerelictFI.unload();
 		auto running = true;
 		size_t current_batch_id;
-		
+
 		while(running)
         {
         	int zoom, x, y;
@@ -72,7 +72,7 @@ private:
                 	{
                 		tile_path = Tile.download(zoom, x, y, url, path);
                 		break;
-                	}
+                }
                 	catch(Exception e)
                 	{
                 		debug writefln("%s. Retrying %d time...", e.msg, count);
@@ -87,21 +87,21 @@ private:
 				{
 					vertices.length = 8;
 					auto w = tile2world(x + 0, y + 0, zoom);
-					vertices[0] = w.x; 
-					vertices[1] = w.y; 
+					vertices[0] = w.x;
+					vertices[1] = w.y;
 
 					w = tile2world(x + 1, y + 0, zoom);
-					vertices[2] = w.x; 
-					vertices[3] = w.y; 
+					vertices[2] = w.x;
+					vertices[3] = w.y;
 
 					w = tile2world(x + 0, y + 1, zoom);
-					vertices[4] = w.x;  
-					vertices[5] = w.y;  
+					vertices[4] = w.x;
+					vertices[5] = w.y;
 
 					w = tile2world(x + 1, y + 1, zoom);
-					vertices[6] = w.x; 
-					vertices[7] = w.y; 
-					
+					vertices[6] = w.x;
+					vertices[7] = w.y;
+
 					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
 				}
 				parent.send(batch_id, cast(shared) tile, x, y, zoom);
@@ -119,15 +119,15 @@ private:
 			        }
 				);
             }
-            catch(Exception e) 
+            catch(Exception e)
             {
                 debug writeln("exception: ", e.msg);
             }
-            catch(Throwable t) 
+            catch(Throwable t)
             {
                 debug writeln("throwable: ", t.msg);
                 parent.send(thisTid, tileLoadingFailed, zoom, x, y);// this means that tile loading failed, child thread crashes
-                							 			 	   // and parent should relaunch thread with the specific zoom, 
+                							 			 	   // and parent should relaunch thread with the specific zoom,
                 							 			 	   // x and y values to try loading once again.
                 running = false;
             }
@@ -141,7 +141,7 @@ private:
 	    uint current_worker;
 	    size_t current_batch_id;
 	    shared(Tile)[int][int][int] tile_cache;  // x, y, zoom
-	    
+
 	    alias Tuple!(int, "x", int, "y", int, "zoom") TileDescription;
 		DList!TileDescription tile_cache_content; // list of tile that cache contains
 		size_t tile_cache_size; // current size of tile cache
@@ -150,16 +150,16 @@ private:
 		auto frontend = receiveOnly!Tid();
 		enforce(frontend != Tid.init, "Wrong frontend tid.");
 		enforce(frontend != thisTid, "frontend and backend shall be running in different threads!");
-		try 
+		try
 		{
 			// prepare workers
 	        foreach(i; 0..maxWorkers)
 	            workers[i] = spawnLinked(&downloading, thisTid); // anwers will be send to frontend immediatly
-			
+
 			// talk to child threads
-	        bool msg; 
+	        bool msg;
 	        bool running = true;
-	        do{     
+	        do{
 	            msg = receiveTimeout(dur!"msecs"(10),
 	            	// error message from childs
 	            	(Tid tid, string text, int zoom, int x, int y)
@@ -179,7 +179,7 @@ private:
 	            		{
 							foreach(uint i, w; workers)
 	            				if(w == tid)
-	            				{	
+	            				{
 	            					workers[i] = spawnLinked(&downloading, thisTid);
 	            					workers[i].send(zoom, x, y, cache_path, url);
 	            					debug writeln(tileLoadingFailed, " received");
@@ -193,11 +193,11 @@ private:
 					// get new tile batch id
 					(string text, size_t batch_id)
 					{
-						if(text == newTileBatch) 
+						if(text == newTileBatch)
 						{
 							current_batch_id = batch_id;
 							foreach(w; workers)
-            				{	
+            				{
             					w.prioritySend(newTileBatch, batch_id);
             				}
 						}
@@ -245,14 +245,14 @@ private:
 	                (size_t batch_id, shared(Tile) shared_tile, int x, int y, int zoom) {
 	                    if(batch_id != current_batch_id)  // ignore tile of other requests
 	                        return;
-	                    
+
 	                    // store given tile into cache
 	                    if(x !in tile_cache)
 	                    	tile_cache[x] = (shared(Tile)[int][int]).init;
 	                    if(y !in tile_cache[x])
 	                    	tile_cache[x][y] = (shared(Tile)[int]).init;
 	                    tile_cache[x][y][zoom] = shared_tile;
-	                    
+
 	                    tile_cache_content.insertFront(TileDescription(x, y, zoom));
 	                    tile_cache_size++;
 	                    if(tile_cache_size > maxTileCacheSize)
@@ -282,7 +282,7 @@ private:
 	                (Variant any)
 	                {
 	                    stderr.writeln("Unknown message received by BackEnd running thread: " ~ any.type.text);
-	                }   
+	                }
 	            );
 	        } while(running);
 		}
@@ -311,14 +311,14 @@ public:
 
 	void close()
 	{
-		
+
 	}
 
     void receiveMsg()
     {
 		// talk to logic thread
-        bool msg;   
-        do{     
+        bool msg;
+        do{
             msg = receiveTimeout(dur!"usecs"(1),
             	(OwnerTerminated ot)
                 {
@@ -327,7 +327,7 @@ public:
                 (Variant any)
                 {
                     stderr.writeln("Unknown message received by GUI thread: " ~ any.type.text);
-                }   
+                }
             );
         } while(msg);
     }

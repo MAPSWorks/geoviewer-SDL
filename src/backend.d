@@ -70,7 +70,7 @@ private:
                 {
                 	try
                 	{
-                		tile_path = Tile.downloadTile(zoom, x, y, url, path);
+                		tile_path = Tile.download(zoom, x, y, url, path);
                 		break;
                 	}
                 	catch(Exception e)

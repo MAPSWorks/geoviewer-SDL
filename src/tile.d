@@ -40,7 +40,7 @@ class Tile {
     	this.type = type;
     }
 
-    static string downloadTile(uint zoom, uint tilex, uint tiley, string url, string local_path)
+    static string download(uint zoom, uint tilex, uint tiley, string url, string local_path)
     {
         // wrap tile x, y
         auto n = pow(2, zoom);
@@ -59,7 +59,7 @@ class Tile {
                 mkdirRecurse(dir); // creating directories may be thread unsafe if different threads try to create the same dir or different dirs that belong 
                                    // to the single parent dir that also is created by these threads. it's better to create dirs in one parent thread or you
                                    // should ensure there won't be collisions.
-            download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
+            .download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
         }
 
         return full_path;
@@ -154,10 +154,8 @@ auto tile2geodetic(double tile_x, double tile_y, double zoom)
 */
 auto tile2world(vec3d xyz)
 {
-    auto n = pow(2, xyz.z.to!int);
-    
     auto x = xyz.x * tileSize;
-    auto y = (/*n - */xyz.y) * tileSize;  // invert y
+    auto y = xyz.y * tileSize;
     auto z = 0; // 2D
 
     return vec3d(x, y, z);
@@ -176,12 +174,11 @@ auto tile2world(double tile_x, double tile_y, double zoom)
 auto world2tile(vec3d xyz)
 {
     auto zoom = xyz.z.to!int;
-    auto n = pow(2, zoom);
-    
+
     auto tile_x = xyz.x / tileSize;
     auto tile_y = xyz.y / tileSize;
 
-    return vec3d(tile_x, /*n - */tile_y, zoom); // invert y
+    return vec3d(tile_x, tile_y, zoom);
 }
 
 auto world2tile(double x, double y, double z)

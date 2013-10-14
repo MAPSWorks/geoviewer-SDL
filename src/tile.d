@@ -1,22 +1,82 @@
 module tile;
 
 private {
-    import std.string: toStringz, text;
+    import std.string: toStringz, text, format;
     import std.exception: enforce;
     import std.conv: to;
     import std.math: PI, atan, sinh, pow, log, tan, cos, abs;
-    import std.file: exists, mkdirRecurse, dirName, read;
+    import std.file: exists, mkdirRecurse, dirName, read, write;
     import std.path: buildNormalizedPath, absolutePath;
-    import std.net.curl: download;
     import std.typecons: Tuple;
+    import etc.c.curl: curl_easy_cleanup, curl_easy_init, curl_easy_perform, curl_easy_setopt, curl_easy_strerror, CurlOption,
+                  CurlError, CurlGlobal, curl_global_cleanup, curl_global_init, CURLOPT_WRITEDATA;
+    debug import std.stdio: writefln;
 
     import gl3n.linalg: vec3d;
     import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
     import derelict.freeimage.freeimage: FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
-                FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits;
+                FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits, FIF_UNKNOWN;
+
+  struct Chunk
+  {
+    void[] data;
+  }
+
+  extern(C) static size_t
+  WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
+  {
+    size_t realsize = size * nmemb;
+    auto mem = cast(Chunk *) userp;
+    mem.data ~= contents[0..realsize];
+
+    return realsize;
+  }
+
+  void download(string url, string filename)
+  {
+    Chunk chunk;
+
+    /* init the curl session */
+    auto curl_handle = curl_easy_init();
+
+    /* specify URL to get */
+    curl_easy_setopt(curl_handle, CurlOption.url, url.toStringz);
+
+    /* send all data to this function  */
+    curl_easy_setopt(curl_handle, CurlOption.writefunction, &WriteMemoryCallback);
+
+    /* we pass our 'chunk' struct to the callback function */
+    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, cast(void *)&chunk);
+
+    /* some servers don't like requests that are made without a user-agent
+       field, so we provide one */
+    curl_easy_setopt(curl_handle, CurlOption.useragent, "libcurl-agent/1.0".toStringz);
+
+    /* get it! */
+    auto res = curl_easy_perform(curl_handle);
+
+    /* check for errors */
+    if(res != CurlError.ok) {
+      throw new TileException(format("curl_easy_perform() failed: %s\n",
+              curl_easy_strerror(res).text));
+    }
+    else {
+      write(filename, chunk.data);
+      debug writefln("%d bytes retrieved", chunk.data.length);
+    }
+
+    /* cleanup curl stuff */
+    curl_easy_cleanup(curl_handle);
+  }
 }
 
-immutable tileSize = 256;
+class TileException : Exception
+{
+  this(string msg)
+  {
+    super(msg);
+  }
+}
 
 class Tile {
 	float[] tex_coords;
@@ -61,17 +121,24 @@ class Tile {
                                    // should ensure there won't be collisions.
             .download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
         }
-
+        import std.stdio;
+        writeln(full_path);
         return full_path;
     }
 
     static Tile loadFromPng(string filename) {
 
+        assert(exists(filename), filename ~ " not exists!");
+
         auto img_fmt = FreeImage_GetFileType(filename.toStringz, 0);
+        assert(img_fmt != FIF_UNKNOWN, "FIF_UNKNOWN: " ~ filename);
+
         auto original = FreeImage_Load(img_fmt, filename.toStringz, 0);
+        assert(original, "original loading failed");
 
         auto image = FreeImage_ConvertTo32Bits(original);
         FreeImage_Unload(original);
+        assert(image, "original converting failed");
 
         int w = FreeImage_GetWidth(image);
         int h = FreeImage_GetHeight(image);
@@ -198,4 +265,15 @@ unittest
     auto t = world2tile(w);
     assert(w == tile2world(t), w.text ~ " " ~ tile2world(t).text);
   }
+}
+
+static this()
+{
+  auto ret = curl_global_init(CurlGlobal.all);
+  assert(!ret);
+}
+
+static ~this()
+{
+  curl_global_cleanup();
 }

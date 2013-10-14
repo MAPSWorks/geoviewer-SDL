@@ -16,7 +16,7 @@ import glamour.vbo: Buffer, ElementBuffer;
 import glamour.texture: Texture2D;
 import gl3n.linalg: vec3d;
 
-import tile: Tile, tileSize;
+import tile: Tile;
 import camera: Camera, Camera2D, Camera3D;
 
 // class describing slippy tile from opengl point of view

@@ -130,9 +130,9 @@ public:
 	 	program_.bind();
 	    position_ = program_.get_attrib_location("in_position");
 	    tex_coord_ = program_.get_attrib_location("in_coord");
-	    camera_2d_ = new Camera2D(width, height, width); // set world width equals to window width
-	    auto center = tileSize*pow(2, camera_2d_.zoom)/2;
-	    camera_2d_.eyes = vec3d(center, center, 1); // set camera to the center
+	    camera_2d_ = new Camera2D(width, height);
+        camera_2d_.scale = pow(2, 7); // set 7th zoom
+	    camera_2d_.eyes = vec3d(0.5, 0.5, 0); // set camera to the center
 	    camera_3d_ = new Camera3D(width, height, 1.0);
 	    camera_mode_ = CameraMode.mode2D;
 	}

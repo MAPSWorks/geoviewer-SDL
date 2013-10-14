@@ -4,7 +4,7 @@ private {
     import std.string: toStringz, text;
     import std.exception: enforce;
     import std.conv: to;
-    import std.math: PI, atan, sinh, pow, log, tan, cos;
+    import std.math: PI, atan, sinh, pow, log, tan, cos, abs;
     import std.file: exists, mkdirRecurse, dirName, read;
     import std.path: buildNormalizedPath, absolutePath;
     import std.net.curl: download;
@@ -154,9 +154,12 @@ auto tile2geodetic(double tile_x, double tile_y, double zoom)
 */
 auto tile2world(vec3d xyz)
 {
-    auto x = xyz.x * tileSize;
-    auto y = xyz.y * tileSize;
-    auto z = 0; // 2D
+    auto zoom = xyz.z.to!int;
+    auto zoom_factor = pow(2, zoom);
+
+    auto x = xyz.x / zoom_factor;
+    auto y = xyz.y / zoom_factor;
+    auto z = xyz.z;
 
     return vec3d(x, y, z);
 }
@@ -174,9 +177,10 @@ auto tile2world(double tile_x, double tile_y, double zoom)
 auto world2tile(vec3d xyz)
 {
     auto zoom = xyz.z.to!int;
+    auto zoom_factor = pow(2, zoom);
 
-    auto tile_x = xyz.x / tileSize;
-    auto tile_y = xyz.y / tileSize;
+    auto tile_x = xyz.x * zoom_factor;
+    auto tile_y = xyz.y * zoom_factor;
 
     return vec3d(tile_x, tile_y, zoom);
 }
@@ -186,3 +190,12 @@ auto world2tile(double x, double y, double z)
     return world2tile(vec3d(x, y, z));
 }
 
+unittest
+{
+  foreach(uint zoom; 0..18)
+  {
+    auto w = vec3d(.5, .5, zoom);
+    auto t = world2tile(w);
+    assert(w == tile2world(t), w.text ~ " " ~ tile2world(t).text);
+  }
+}

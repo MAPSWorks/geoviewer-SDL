@@ -182,8 +182,9 @@ public:
                     mouse_x_ = event.motion.x;
                     mouse_y_ = event.motion.y;
 
-                    //auto g = renderer_.camera.mouse2world(mouse_x_, mouse_y_, 0).world2tile.tile2geodetic;
-                    //writefln("geodetic: %s", g);
+                    //auto t = renderer_.camera.mouse2world(mouse_x_, mouse_y_, 0).world2tile;
+                    //writefln("tile: %s", t);
+                    //writefln("geodetic: %s", t.tile2geodetic);
 
                     if (event.motion.state & SDL_BUTTON_RMASK) {
                         renderer_.camera.scrollingEnabled = true;
@@ -203,12 +204,12 @@ public:
                     {
                         if (event.wheel.y > 0)
                         {
-                            renderer_.camera.multiplyScale(.975);
+                            renderer_.camera.multiplyScale(1.025);
                             requestNewTileBatch();
                         }
                         else
                         {
-                            renderer_.camera.multiplyScale(1.025);
+                            renderer_.camera.multiplyScale(.975);
                             requestNewTileBatch();
                         }
                     }

@@ -60,9 +60,6 @@ private:
 	            	return;
 	            }
 
-                enum step = 256; // real size of tile in pixels
-				double level_size = step * pow(2, zoom); // all tiles of the level with current zoom will take this amount of pixels
-
                 string tile_path;
                 auto count = 0;
                 // try to download five times

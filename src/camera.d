@@ -1,7 +1,7 @@
 module camera;
 
 import std.typecons: Tuple;
-import std.math: pow, round;
+import std.math: pow, round, log2;
 import std.conv: to;
 
 import derelict.opengl3.gl3: glViewport;
@@ -14,7 +14,6 @@ class Camera
 protected:
 	mat4 modelmatrix_;
 	double scale_;
-	double world_width_; // world height is computed using aspect ratio
 	double scale_min_;
 	double scale_max_;
 
@@ -26,18 +25,16 @@ protected:
 	bool scrolling_enabled_;
 
 	abstract void computeModelViewMatrix();
-	abstract void computeZoom();
 public:
 
-	this(uint width, uint height, double world_width, double scale_min = 0.5, double scale_max = 5)
+	this(uint width, uint height, double scale_min, double scale_max)
 	{
-		scale_ = 2.;
-		world_width_ = world_width;
+		scale_ = 1.;
 		scale_min_ = scale_min;
 		scale_max_ = scale_max;
 		eyes_ = vec3d(0, 0, 1);
 		resize(width, height);
-		computeZoom();
+		computeModelViewMatrix();
 	}
 
 	final @property scaleMin(double value) { scale_min_ = value; }
@@ -63,7 +60,6 @@ public:
 		auto new_value = scale_ * factor;
 		if (new_value <= scale_max_ && new_value >= scale_min_) {
 			scale_ = new_value;
-			computeZoom();
 			computeModelViewMatrix();
 		}
 	}
@@ -77,7 +73,7 @@ public:
 	{
 		if(value >= scale_min_ && value <= scale_max_)
 		scale_ = value;
-		computeZoom();
+		computeModelViewMatrix();
 	}
 
 	final @property scrollingEnabled() { return scrolling_enabled_; }
@@ -145,33 +141,36 @@ protected:
 	override void computeModelViewMatrix()
 	{
 		// set the matrix
-		auto world = mat4.identity.translate(-eyes_.x, -eyes_.y, -eyes_.z);
-		auto view = mat4.look_at(vec3(0, 0, 1), vec3(0, 0, 0), vec3(0, 1., 0));
-		auto size = scale_ * world_width_ / 2;
-		auto projection = mat4.orthographic(-size, size, size/aspect_ratio_, -size/aspect_ratio_, 2*size, 0);
+		auto world = mat4.identity.translate(-eyes_.x, -eyes_.y, 0);
+		auto size = 1 / scale_;
+        auto view = mat4.look_at(vec3(0, 0, size), vec3(0, 0, 0), vec3(0, 1., 0));
+		auto projection = mat4.orthographic(-size, size, size/aspect_ratio_, -size/aspect_ratio_, size, -size);
 		modelmatrix_ = projection * view * world;
-	}
 
-	override void computeZoom()
-	{
-		zoom_ = 3;
+		zoom_ = log2(scale_).to!int;
 	}
 
 public:
 
-	this(uint width, uint height, double world_width, double min_scale = 0.5, double max_scale = 5)
+	this(uint width, uint height, double min_scale = 1, double max_scale = 65536*4)
 	{
-		super(width, height, world_width, min_scale, max_scale);
+		super(width, height, min_scale, max_scale);
 	}
 
 	override vec3d mouse2world(vec3d xyz)
 	{
+		// normalize
+        xyz.x /= viewportWidth/2;
+        xyz.y /= viewportHeight/2;
+
 		// translate to center
-		xyz.x -= world_width_/2;
+		xyz.x -= 1;
+        xyz.y -= 1;
 		// invert y coordinate
-		xyz.y = world_width_/aspect_ratio_/2 - xyz.y;
+		xyz.y *= -1;
 		// scale
-		xyz *= scale_;
+		xyz.x /= scale_;
+        xyz.y /= scale_*aspect_ratio_;
 		// translate to camera coordinate system
 		xyz.x = eyes.x + xyz.x;
 		xyz.y = eyes.y - xyz.y;
@@ -217,6 +216,23 @@ public:
 
         return result;
     }
+}
+
+unittest
+{
+    auto cam = new Camera2D(400, 300, 1);
+
+    auto w = cam.mouse2world(vec3d(.0, .0, cam.zoom));
+
+    assert(w.x >= -1 && w.x <= 1);
+    assert(w.y >= -1 && w.y <= 1);
+    assert(w.z == cam.zoom);
+
+    w = cam.mouse2world(vec3d(399, 299, cam.zoom));
+
+    assert(w.x >= -1 && w.x <= 1);
+    assert(w.y >= -1 && w.y <= 1);
+    assert(w.z == cam.zoom);
 }
 
 alias Camera2D Camera3D;

@@ -7,7 +7,7 @@ import std.conv: to;
 import derelict.opengl3.gl3: glViewport;
 import gl3n.linalg: vec3, vec3d, mat4;
 
-import tile: world2tile, tile2world;
+import tile: world2tile, tile2world, tileSize;
 
 class Camera
 {
@@ -20,6 +20,7 @@ protected:
 	uint zoom_; // see slippy tiles
 	double aspect_ratio_;
 	uint viewport_width_, viewport_height_;
+    double world_factor_; // takes into account the relationship the window size and world size
 
 	vec3d eyes_; // coordinates of veiwer's eyes
 	bool scrolling_enabled_;
@@ -33,6 +34,7 @@ public:
 		scale_min_ = scale_min;
 		scale_max_ = scale_max;
 		eyes_ = vec3d(0, 0, 1);
+        world_factor_ = width / 2. / tileSize;
 		resize(width, height);
 		computeModelViewMatrix();
 	}
@@ -96,9 +98,7 @@ public:
 
 				// correct current globe states using difference tween old and new marker coordinates
 				vec3d new_eyes;
-				new_eyes.x = eyes_.x - (current_position.x - old_position.x);
-				new_eyes.y = eyes_.y - (current_position.y - old_position.y);
-				new_eyes.z = eyes_.z - (current_position.z - old_position.z);
+                new_eyes = eyes - (current_position - old_position);
 				eyes_ = new_eyes;
 
 				computeModelViewMatrix();
@@ -142,7 +142,7 @@ protected:
 	{
 		// set the matrix
 		auto world = mat4.identity.translate(-eyes_.x, -eyes_.y, 0);
-		auto size = 1 / scale_;
+		auto size = world_factor_ / scale_;
         auto view = mat4.look_at(vec3(0, 0, size), vec3(0, 0, 0), vec3(0, 1., 0));
 		auto projection = mat4.orthographic(-size, size, size/aspect_ratio_, -size/aspect_ratio_, size, -size);
 		modelmatrix_ = projection * view * world;
@@ -169,8 +169,8 @@ public:
 		// invert y coordinate
 		xyz.y *= -1;
 		// scale
-		xyz.x /= scale_;
-        xyz.y /= scale_*aspect_ratio_;
+		xyz.x /= scale_/world_factor_;
+        xyz.y /= scale_*aspect_ratio_/world_factor_;
 		// translate to camera coordinate system
 		xyz.x = eyes.x + xyz.x;
 		xyz.y = eyes.y - xyz.y;

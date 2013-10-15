@@ -70,6 +70,8 @@ private {
   }
 }
 
+enum tileSize = 256;
+
 class TileException : Exception
 {
   this(string msg)

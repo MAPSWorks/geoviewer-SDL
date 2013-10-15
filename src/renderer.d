@@ -185,8 +185,7 @@ public:
 			stderr.writefln("Too much tiles in set (max %s): %s", tileAmount, amount);
 			amount = tileAmount;
 		}
-		foreach(gltile; downloading_set_)
-			gltile.remove();
+		current_set_ ~= downloading_set_; // add already downloaded tiles to the current
 		downloading_set_ = null;
 		downloading_total_ = amount;
 		downloading_set_.reserve(amount);

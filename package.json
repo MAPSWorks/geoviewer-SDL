@@ -1,7 +1,7 @@
 {
 	"name": "geoviewer",
-	"targetPath": "bin", 
-	"targetName": "geoviewer", 
+	"targetPath": "bin",
+	"targetName": "geoviewer",
 	"description": "Simple viewer for OSM and other geospatial data",
 	"homepage": "http://example.org",
 	"copyright": "Copyright © 2013, Alexandr Druzhinin",
@@ -12,9 +12,9 @@
 	"dflags": [
 	],
 	"lflags": [
-		"-lphobos2",
-	], 
+	],
 	"libs": [
+		"curl"
 	],
 	"authors": [
 		"Alexandr Druzhinin"

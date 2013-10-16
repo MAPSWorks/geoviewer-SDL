@@ -96,11 +96,9 @@ public:
 
         //The frame rate regulator
         StopWatch fps;
+        fps.start();
         while(true)
 		{
-			//Start the frame timer
-            fps.reset();
-            fps.start();
 
             // process events from OS, if result is
 			// false then break loop
@@ -114,13 +112,15 @@ public:
 
         	SDL_GL_SwapWindow(sdl_window_);
 
-            if( ( fps.peek.msecs < 1000 / FRAMES_PER_SECOND ) )
+            auto t = fps.peek.msecs;
+            if(t < 1000 / FRAMES_PER_SECOND)
             {
                 //Sleep the remaining frame time
-                auto delay = (1000 / FRAMES_PER_SECOND) - fps.peek.msecs;
-                if(delay > 0)
-                    Thread.sleep(dur!"msecs"(delay));
+                auto delay = (1000 / FRAMES_PER_SECOND) - t;
+                Thread.sleep(dur!"msecs"(delay));
             }
+            //reset the frame timer
+            fps.reset();
 		}
 	}
 

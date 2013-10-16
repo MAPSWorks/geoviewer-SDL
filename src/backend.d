@@ -24,116 +24,119 @@ private:
 
 	string url_, cache_path_;
 
-	static void downloading(Tid parent)
-	{
-		DerelictFI.load();
-		scope(exit) DerelictFI.unload();
-		auto running = true;
-		size_t current_batch_id;
-
-		while(running)
+    // parent is Tid of parent, id is unique identificator of child
+    static void downloading(Tid parent, int id)
+    {
+        int zoom, x, y;
+        x = y = zoom = -1;
+        string path, url;
+        auto running = true;
+        size_t current_batch_id;
+        try
         {
-        	int zoom, x, y;
-            string path, url;
+            DerelictFI.load();
+            scope(exit) DerelictFI.unload();
 
-			// get tile batch id
-			void handleTileBatchId(string text, size_t batch_id)
-			{
-				if(text == newTileBatch)
-				{
-					current_batch_id = batch_id;
-				}
-			}
-
-			// get tile description to download
-			void handleTileRequest(size_t batch_id, int x, int y, int zoom, string path, string url)
-			{
-				version(none)
+            while(running)
+            {
+                // get tile batch id
+                void handleTileBatchId(string text, size_t batch_id)
                 {
-                	import std.random;
-	                auto i = uniform(0, 15);
-	                if(i == 10)
-	                	throw new Error("error imitation");
-	            }
-	            if(batch_id < current_batch_id)  // ignore tile of previous requests
-	            {
-	            	return;
-	            }
-
-                string tile_path;
-                auto count = 0;
-                // try to download five times
-                do
-                {
-                	try
-                	{
-                		tile_path = Tile.download(zoom, x, y, url, path);
-                		break;
+                    if(text == newTileBatch)
+                    {
+                        current_batch_id = batch_id;
+                    }
                 }
-                	catch(Exception e)
-                	{
-                		debug writefln("%s. Retrying %d time...", e.msg, count);
-                		count++;
-                	}
-                } while(count < 5);
 
-                debug if(count >= 5) writeln("downloading failure");
+                // get tile description to download
+                void handleTileRequest(size_t batch_id, int local_x, int local_y, int local_zoom, string path, string url)
+                {
+                    x = local_x;
+                    y = local_y;
+                    zoom = local_zoom;
+                    version(none)
+                    {
+                        import std.random;
+                        auto i = uniform(0, 15);
+                        if(i == 10)
+                            throw new Error("error imitation");
+                    }
+                    if(batch_id < current_batch_id)  // ignore tile of previous requests
+                    {
+                        return;
+                    }
 
-				auto tile = Tile.loadFromPng(tile_path);
-				with(tile)
-				{
-					vertices.length = 8;
-					auto w = tile2world(x + 0, y + 0, zoom);
-					vertices[0] = w.x;
-					vertices[1] = w.y;
+                    string tile_path;
+                    auto count = 0;
+                    // try to download five times
+                    do
+                    {
+                        try
+                        {
+                            tile_path = Tile.download(zoom, x, y, url, path);
+                            break;
+                        }
+                        catch(Exception e)
+                        {
+                            debug writefln("%s. Retrying %d time...", e.msg, count);
+                            count++;
+                        }
+                    } while(count < 4);
 
-					w = tile2world(x + 1, y + 0, zoom);
-					vertices[2] = w.x;
-					vertices[3] = w.y;
+                    // the last fifth time do it without dedicated exception catching
+                    if(count >= 4)
+                        tile_path = Tile.download(zoom, x, y, url, path);
 
-					w = tile2world(x + 0, y + 1, zoom);
-					vertices[4] = w.x;
-					vertices[5] = w.y;
+                    auto tile = Tile.loadFromPng(tile_path);
+                    with(tile)
+                    {
+                        vertices.length = 8;
+                        auto w = tile2world(x + 0, y + 0, zoom);
+                        vertices[0] = w.x;
+                        vertices[1] = w.y;
 
-					w = tile2world(x + 1, y + 1, zoom);
-					vertices[6] = w.x;
-					vertices[7] = w.y;
+                        w = tile2world(x + 1, y + 0, zoom);
+                        vertices[2] = w.x;
+                        vertices[3] = w.y;
 
-					tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
-				}
-				parent.send(batch_id, cast(shared) tile, x, y, zoom);
-			}
+                        w = tile2world(x + 0, y + 1, zoom);
+                        vertices[4] = w.x;
+                        vertices[5] = w.y;
 
-            try
-            {
-        	   	auto msg = receiveTimeout(dur!"msecs"(1),
-					&handleTileBatchId,
-					&handleTileRequest,
-					(OwnerTerminated ot)
-			        {
-			        	// normal exit
-			        	running = false;
-			        }
-				);
-            }
-            catch(Exception e)
-            {
-                debug writeln("exception: ", e.msg);
-            }
-            catch(Throwable t)
-            {
-                debug writeln("throwable: ", t.msg);
-                parent.send(thisTid, tileLoadingFailed, zoom, x, y);// this means that tile loading failed, child thread crashes
-                							 			 	   // and parent should relaunch thread with the specific zoom,
-                							 			 	   // x and y values to try loading once again.
-                running = false;
+                        w = tile2world(x + 1, y + 1, zoom);
+                        vertices[6] = w.x;
+                        vertices[7] = w.y;
+
+                        tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
+                    }
+                    parent.send(batch_id, cast(shared) tile, x, y, zoom);
+                    x = y = zoom = -1;
+                }
+
+                auto msg = receiveTimeout(dur!"msecs"(100), // because this function is single in loop set delay big enough to lower processor loading
+                    &handleTileBatchId,
+                    &handleTileRequest,
+                    (OwnerTerminated ot)
+                    {
+                        // normal exit
+                        running = false;
+                    }
+                );
             }
         }
-	}
+        catch(Throwable t)
+        {
+            debug writefln("thread id %s, throwable: %s", id, t.msg);
+            debug writefln("on throwing x: %s, y: %s, zoom: %s", x, y, zoom);
+            // complain to parent that something gone wrong
+            parent.send(id, x, y, zoom);
+            running = false;
+        }
+    }
 
 	static run(string url, string cache_path)
 	{
-		enum maxWorkers = 32;
+		enum maxWorkers = 16;
 	    Tid[maxWorkers] workers;
 	    uint current_worker;
 	    size_t current_batch_id;
@@ -150,41 +153,28 @@ private:
 		try
 		{
 			// prepare workers
-	        foreach(i; 0..maxWorkers)
-	            workers[i] = spawnLinked(&downloading, thisTid); // anwers will be send to frontend immediatly
+	        foreach(int id; 0..maxWorkers)
+                workers[id] = spawnLinked(&downloading, thisTid, id);
 
 			// talk to child threads
 	        bool msg;
 	        bool running = true;
 	        do{
 	            msg = receiveTimeout(dur!"msecs"(10),
-	            	// error message from childs
-	            	(Tid tid, string text, int zoom, int x, int y)
-	            	{
-	            		debug writeln(text);
-	            		if(text == childFailed)
-	            		{
-	            			foreach(uint i, w; workers)
-	            				if(w == tid)
-	            				{
-	            					workers[i] = spawnLinked(&downloading, thisTid);
-	            					debug writeln(childFailed, " received");
-	            					running = false;
-	            				}
-	            		}
-	            		else if(text == tileLoadingFailed)
-	            		{
-							foreach(uint i, w; workers)
-	            				if(w == tid)
-	            				{
-	            					workers[i] = spawnLinked(&downloading, thisTid);
-	            					workers[i].send(zoom, x, y, cache_path, url);
-	            					debug writeln(tileLoadingFailed, " received");
-	            				}
-	            		}
-	            		else
-	            		{
-	            			debug stderr.writefln("Unknown type message is received from child:\ntext: %s, zoom: %d, x: %d, y: %d", text, zoom, x, y);
+                    // if x, y and zoom don't equal to -1 it means tile loading failed, child thread crashes
+                    // and parent can relaunch thread with the same zoom, x and y values to try loading once again.
+                    // If x, y or zoom equals to -1 it means that thread has crashed before valid x, y or zoom
+                    // recieving and parent can only restart thread without relaunching tile downloading
+                    (int id, int x, int y, int zoom)
+                    {
+                        enforce(id >= 0 && id < maxWorkers);
+                        workers[id] = spawnLinked(&downloading, thisTid, id);
+                        debug writefln("thread respawned, id: %s", id);
+                        // relaunch tile downloading if there is valid info
+                        if(x != -1 && y != -1 && zoom != -1)
+                        {
+                            workers[id].send(x, y, zoom, cache_path, url);
+                            debug writefln("tile downloading restarted, x: %s, y: %s, zoom: %s", x, y, zoom);
 						}
 					},
 					// get new tile batch id

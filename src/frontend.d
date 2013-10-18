@@ -248,6 +248,8 @@ public:
     {
 		// talk to logic thread
         bool msg;
+        StopWatch timer;
+        timer.start();
         do{
             msg = receiveTimeout(dur!"usecs"(1),
                 // getting tiles from backend
@@ -279,6 +281,7 @@ public:
                     stderr.writeln("Unknown message received by frontend thread: " ~ any.type.text);
                 }
             );
-        } while(msg);
+        } while(msg && (timer.peek.msecs < 5)); // do not process longer than 5 milliseconds at once
+        timer.stop();
     }
 }

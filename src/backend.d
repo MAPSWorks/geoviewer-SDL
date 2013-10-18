@@ -8,6 +8,8 @@ import std.conv: text;
 import std.math: pow;
 import std.container: DList;
 import std.typecons: Tuple;
+import std.file: exists, mkdirRecurse, dirName, read, write;
+import std.path: buildNormalizedPath, absolutePath;
 
 import derelict.freeimage.freeimage: DerelictFI;
 
@@ -23,6 +25,21 @@ private:
 	enum tileLoadingFailed = "tile loading failed";
 
 	string url_, cache_path_;
+
+    static Tuple!(string, "path", string, "url") makeFullPathAndUrl(int x, int y, int zoom, string url, string local_path)
+    {
+        // wrap tile x, y
+        auto n = pow(2, zoom);
+        x = x % n;
+        y = y % n;
+
+        string absolute_path = absolutePath(local_path);
+        auto filename = y.text ~ ".png";
+
+        auto full_path = buildNormalizedPath(absolute_path, zoom.text, x.text, filename);
+        auto full_url = url ? url ~ "/" ~ zoom.text ~ "/" ~ x.text ~ "/" ~ filename : "";
+        return Tuple!(string, "path", string, "url")(full_path, full_url);
+    }
 
     // parent is Tid of parent, id is unique identificator of child
     static void downloading(Tid parent, int id)
@@ -49,8 +66,9 @@ private:
                 }
 
                 // get tile description to download
-                void handleTileRequest(size_t batch_id, int local_x, int local_y, int local_zoom, string path, string url)
+                void handleTileRequest(size_t batch_id, int local_x, int local_y, int local_zoom, string url, string path)
                 {
+                    // use outer variable, see below catch construction
                     x = local_x;
                     y = local_y;
                     zoom = local_zoom;
@@ -66,49 +84,7 @@ private:
                         return;
                     }
 
-                    string tile_path;
-                    auto count = 0;
-                    // try to download five times
-                    do
-                    {
-                        try
-                        {
-                            tile_path = Tile.download(zoom, x, y, url, path);
-                            break;
-                        }
-                        catch(Exception e)
-                        {
-                            debug writefln("%s. Retrying %d time...", e.msg, count);
-                            count++;
-                        }
-                    } while(count < 4);
-
-                    // the last fifth time do it without dedicated exception catching
-                    if(count >= 4)
-                        tile_path = Tile.download(zoom, x, y, url, path);
-
-                    auto tile = Tile.loadFromPng(tile_path);
-                    with(tile)
-                    {
-                        vertices.length = 8;
-                        auto w = tile2world(x + 0, y + 0, zoom);
-                        vertices[0] = w.x;
-                        vertices[1] = w.y;
-
-                        w = tile2world(x + 1, y + 0, zoom);
-                        vertices[2] = w.x;
-                        vertices[3] = w.y;
-
-                        w = tile2world(x + 0, y + 1, zoom);
-                        vertices[4] = w.x;
-                        vertices[5] = w.y;
-
-                        w = tile2world(x + 1, y + 1, zoom);
-                        vertices[6] = w.x;
-                        vertices[7] = w.y;
-
-                        tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
-                    }
+                    auto tile = Tile.create(x, y, zoom, url, path);
                     parent.send(batch_id, cast(shared) tile, x, y, zoom);
                     x = y = zoom = -1;
                 }
@@ -136,7 +112,7 @@ private:
 
 	static run(string url, string cache_path)
 	{
-		enum maxWorkers = 16;
+		enum maxWorkers = 8;
 	    Tid[maxWorkers] workers;
 	    uint current_worker;
 	    size_t current_batch_id;
@@ -217,7 +193,11 @@ private:
 						auto current_tid = workers[current_worker];
 	                    try
 						{
-							current_tid.send(batch_id, x, y, zoom, cache_path, url);
+                            auto full = makeFullPathAndUrl(x, y, zoom, url, cache_path);
+							auto dir = dirName(full.path);
+                            if(!exists(dir))
+                                mkdirRecurse(dir); // it's better to create dirs in one parent thread instead of each of workers
+                            current_tid.send(batch_id, x, y, zoom, full.url, full.path);
 		                    current_worker++;
 		                    if(current_worker == maxWorkers)
 		                        current_worker = 0;

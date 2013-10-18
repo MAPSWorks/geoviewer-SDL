@@ -5,8 +5,7 @@ private {
     import std.exception: enforce;
     import std.conv: to;
     import std.math: PI, atan, sinh, pow, log, tan, cos, abs;
-    import std.file: exists, mkdirRecurse, dirName, read, write;
-    import std.path: buildNormalizedPath, absolutePath;
+    import std.file: exists, read, write;
     import std.typecons: Tuple;
     import etc.c.curl: curl_easy_cleanup, curl_easy_init, curl_easy_perform, curl_easy_setopt, curl_easy_strerror, CurlOption,
                   CurlError, CurlGlobal, curl_global_cleanup, curl_global_init, CURLOPT_WRITEDATA;
@@ -15,7 +14,8 @@ private {
     import gl3n.linalg: vec3d;
     import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
     import derelict.freeimage.freeimage: FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
-                FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits, FIF_UNKNOWN;
+                FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits, FIF_UNKNOWN,
+                FreeImage_OpenMemory, FreeImage_GetFileTypeFromMemory, FreeImage_LoadFromMemory, FreeImage_CloseMemory;
 
   struct Chunk
   {
@@ -32,7 +32,7 @@ private {
     return realsize;
   }
 
-  void download(string url, string filename)
+  ubyte[] downloadToMemory(string url)
   {
     Chunk chunk;
 
@@ -41,6 +41,9 @@ private {
 
     /* specify URL to get */
     curl_easy_setopt(curl_handle, CurlOption.url, url.toStringz);
+    // this is workaround for curl bug with signal,
+    // see http://stackoverflow.com/questions/9191668/error-longjmp-causes-uninitialized-stack-frame
+    curl_easy_setopt(curl_handle, CurlOption.nosignal, 1);
 
     /* send all data to this function  */
     curl_easy_setopt(curl_handle, CurlOption.writefunction, &WriteMemoryCallback);
@@ -60,13 +63,11 @@ private {
       throw new TileException(format("curl_easy_perform() failed: %s\n",
               curl_easy_strerror(res).text));
     }
-    else {
-      write(filename, chunk.data);
-      debug writefln("%d bytes retrieved", chunk.data.length);
-    }
-
+    debug writefln("%d bytes retrieved", chunk.data.length);
     /* cleanup curl stuff */
     curl_easy_cleanup(curl_handle);
+
+    return cast(ubyte[]) chunk.data;
   }
 }
 
@@ -81,7 +82,64 @@ class TileException : Exception
 }
 
 class Tile {
-	float[] tex_coords;
+
+private:
+
+    static ubyte[] downloadToMemorySeveralTimes(string url, int times)
+    {
+        ubyte[] data;
+        auto count = 0;
+        // try to download five times
+        do
+        {
+            try
+            {
+                data = .downloadToMemory(url);
+                break;
+            }
+            catch(Exception e)
+            {
+                debug writefln("%s. Retrying %d time...", e.msg, count);
+                count++;
+            }
+        } while(count < times - 1);
+
+        // the last time do not ignore exceptions
+        if(count >= times-1)
+            data = .downloadToMemory(url);
+
+        return data;
+    }
+
+    static Tile loadFromMemory(ubyte[] data) {
+
+        auto memstream = FreeImage_OpenMemory(data.ptr, data.length);
+        scope(exit) FreeImage_CloseMemory(memstream);
+
+        auto img_fmt = FreeImage_GetFileTypeFromMemory(memstream, 0);
+        enforce(img_fmt != FIF_UNKNOWN, "FIF_UNKNOWN");
+
+        auto original = FreeImage_LoadFromMemory(img_fmt, memstream, 0);
+        assert(original, "original loading from memory failed");
+        scope(exit) FreeImage_Unload(original);
+
+        auto image = FreeImage_ConvertTo32Bits(original);
+        assert(image, "original converting failed");
+        scope(exit) FreeImage_Unload(image);
+
+        int w = FreeImage_GetWidth(image);
+        int h = FreeImage_GetHeight(image);
+
+        size_t size = FreeImage_GetPitch(image) * h;
+        ubyte[] pixels;
+        pixels.length = size;
+        // copy data to our own buffer and free buffer that is owned by FreeImage
+        pixels[] = FreeImage_GetBits(image)[0..size];
+        return new Tile((float[]).init, (float[]).init, pixels, GL_RGB, w, h, GL_BGRA, GL_UNSIGNED_BYTE);
+    }
+
+public:
+    float[] tex_coords;
 	float[] vertices;
 	GLint internal_format;
 	GLsizei width;
@@ -102,57 +160,69 @@ class Tile {
     	this.type = type;
     }
 
-    static string download(uint zoom, uint tilex, uint tiley, string url, string local_path)
+    /**
+    *   takes tile coordinates, url to tile server and path to local cache
+    * If requested tile doesn't exist in cache download it using given url.vertices
+    * If tile exists in local cache load it from cache. If tile doesn't exist or url
+    * is empty or downloading failed load nodata tile.
+    */
+    static Tile create(int x, int y, int zoom, string url, string path)
     {
-        // wrap tile x, y
-        auto n = pow(2, zoom);
-        tilex = tilex % n;
-        tiley = tiley % n;
-
-        string absolute_path = absolutePath(local_path);
-        auto filename = tiley.text ~ ".png";
-
-        auto full_path = buildNormalizedPath(absolute_path, zoom.text, tilex.text, filename);
-
-        if(!exists(full_path) && url) {
+        ubyte[] data;
+        // if file exists load it
+        if(exists(path))
+            data = cast(ubyte[]) read(path);
+        // if file doesn't exist but there is no url - load tile with label 'no data' to inform user
+        else if(!url)
+            data = cast(ubyte[]) read("./cache/nodata.png");
+        // if file doesn't exist but there is url - download it
+        else {
             //trying to download from openstreet map
-            auto dir = dirName(full_path);
-            if(!exists(dir))
-                mkdirRecurse(dir); // creating directories may be thread unsafe if different threads try to create the same dir or different dirs that belong
-                                   // to the single parent dir that also is created by these threads. it's better to create dirs in one parent thread or you
-                                   // should ensure there won't be collisions.
-            .download(url ~ zoom.text ~ "/" ~ tilex.text ~ "/" ~ filename, full_path);
+            try
+            {
+                data = downloadToMemorySeveralTimes(url, 3);
+                write(path, data);
+            }
+            catch(Exception e)
+            {
+                debug writefln("failed downloading: %s", url);
+                data = cast(ubyte[]) read("./cache/nodata.png"); // TODO hardcoded path to nodata tile
+            }
         }
-        import std.stdio;
-        writeln(full_path);
-        return full_path;
-    }
+        enforce(data, "empty data to be loaded as tile image");
 
-    static Tile loadFromPng(string filename) {
+        Tile tile;
+        try
+        {
+            tile =  loadFromMemory(data);
+        }
+        catch(Exception e)
+        {
+            debug writefln("failed loading from memory");
+            data = cast(ubyte[]) read("./cache/nodata.png");
+            tile = loadFromMemory(data);
+        }
+        with(tile)
+        {
+            vertices.length = 8;
+            auto ww = tile2world(x + 0, y + 0, zoom);
+            vertices[0] = ww.x;
+            vertices[1] = ww.y;
 
-        assert(exists(filename), filename ~ " not exists!");
+            ww = tile2world(x + 1, y + 0, zoom);
+            vertices[2] = ww.x;
+            vertices[3] = ww.y;
 
-        auto img_fmt = FreeImage_GetFileType(filename.toStringz, 0);
-        assert(img_fmt != FIF_UNKNOWN, "FIF_UNKNOWN: " ~ filename);
+            ww = tile2world(x + 0, y + 1, zoom);
+            vertices[4] = ww.x;
+            vertices[5] = ww.y;
 
-        auto original = FreeImage_Load(img_fmt, filename.toStringz, 0);
-        assert(original, "original loading failed");
+            ww = tile2world(x + 1, y + 1, zoom);
+            vertices[6] = ww.x;
+            vertices[7] = ww.y;
 
-        auto image = FreeImage_ConvertTo32Bits(original);
-        FreeImage_Unload(original);
-        assert(image, "original converting failed");
-
-        int w = FreeImage_GetWidth(image);
-        int h = FreeImage_GetHeight(image);
-
-        size_t size = FreeImage_GetPitch(image) * h;
-        ubyte[] pixels;
-        pixels.length = size;
-        // copy data to our own buffer and free buffer that is owned by FreeImage
-        pixels[] = FreeImage_GetBits(image)[0..size];
-        FreeImage_Unload(image);
-        auto tile = new Tile((float[]).init, (float[]).init, pixels, GL_RGB, w, h, GL_BGRA, GL_UNSIGNED_BYTE);
-
+            tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
+        }
         return tile;
     }
 }

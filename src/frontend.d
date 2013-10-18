@@ -12,7 +12,7 @@ import derelict.sdl2.sdl;
 import derelict.opengl3.gl3;
 
 import renderer: Renderer;
-import tile: Tile, world2tile, tile2geodetic;
+import tile: Tile, world2tile, tile2geodetic, geodetic2tile, tile2world;
 import backend: BackEnd;
 
 // Frontend receives user input from OS and sends it to backend,
@@ -88,6 +88,7 @@ public:
 	    DerelictGL3.reload();
 
 		renderer_ = new Renderer(width, height);
+        renderer_.camera.eyes = geodetic2tile(lon, lat, 0).tile2world;
 
         url_ = url;
         cache_path_ = cache_path;

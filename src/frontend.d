@@ -24,7 +24,9 @@ private:
 	SDL_Window* sdl_window_;
 	SDL_GLContext gl_context_;
 
-    Tid backend_;
+    BackEnd backend_;
+    Tid backend_tid_;
+    string url_, cache_path_;
 
     uint mouse_x_, mouse_y_;
 
@@ -32,12 +34,27 @@ private:
     size_t batch_id_;
     static assert(isUnsigned!(typeof(batch_id_)), "batch_id_ shall have unsigned type!");
 
+    void launchBackend()
+    {
+        static ubyte count;
+        if(count > 2)
+        {
+            stderr.writefln("****************************************");
+            stderr.writefln("Too many attemps to launch backend: %s.", count);
+            stderr.writefln("No more attempts will be performed.");
+            stderr.writefln("****************************************\n\n");
+            throw new Exception("BackEnd launching failed.");
+        }
+        writeln("Backend launching...");
+        backend_ = new BackEnd(url_, cache_path_);
+        backend_tid_ = backend_.runAsync();
+        backend_tid_.send(thisTid);
+        count++;
+    }
+
 public:
 
-    @property backend() { return backend_; }
-    @property backend(Tid value) { backend_ = value; }
-
-	this(uint width, uint height)
+    this(uint width, uint height, double lon, double lat, string url, string cache_path)
 	{
 		DerelictSDL2.load();
 	    DerelictGL3.load();
@@ -71,6 +88,11 @@ public:
 	    DerelictGL3.reload();
 
 		renderer_ = new Renderer(width, height);
+
+        url_ = url;
+        cache_path_ = cache_path;
+
+        launchBackend();
 	}
 
 	void close()
@@ -87,7 +109,7 @@ public:
 	{
         enum FRAMES_PER_SECOND = 60;
 
-        enforce(backend != Tid.init);
+        enforce(backend_tid_ != Tid.init);
 
         // without delay messages can be missed by backend TODO: the reason isn't known
         Thread.sleep(dur!"msecs"(100));
@@ -137,11 +159,11 @@ public:
         batch_id_++;  // intended integer overflow
 
         // send new tile batch id to let backend to skip old batches
-        backend_.prioritySend(BackEnd.newTileBatch, batch_id_);
+        backend_tid_.prioritySend(batch_id_);
         foreach(tile; viewable_tile_set)
         {
             // request tile image from backend
-            backend_.send(batch_id_, tile.x, tile.y, tile.zoom);
+            backend_tid_.send(batch_id_, tile.x, tile.y, tile.zoom);
         }
     }
 
@@ -228,7 +250,8 @@ public:
         do{
             msg = receiveTimeout(dur!"usecs"(1),
                 // getting tiles from backend
-                (size_t batch_id, shared(Tile) shared_tile) {
+                (size_t batch_id, shared(Tile) shared_tile)
+                {
                     if(batch_id != batch_id_)  // ignore tile of other requests
                         return;
 
@@ -236,10 +259,22 @@ public:
                     assert(tile !is null);
                     renderer_.setTile(tile);
                 },
-                (OwnerTerminated ot) {
+                (BackEnd.Status status)
+                {
+                    if(status == BackEnd.Status.backendCrashed)
+                    {
+                        // back end crashed, restart it
+                        launchBackend();
+                        return;
+                    }
+                    stderr.writefln("Message unprocessed: %s", status);
+                },
+                (OwnerTerminated ot)
+                {
                     writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Owner terminated");
                 },
-                (Variant any) {
+                (Variant any)
+                {
                     stderr.writeln("Unknown message received by frontend thread: " ~ any.type.text);
                 }
             );

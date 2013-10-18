@@ -51,12 +51,9 @@ private:
         size_t current_batch_id;
 
         // get tile batch id
-        void handleTileBatchId(string text, size_t batch_id)
+        void handleTileBatchId(size_t batch_id)
         {
-            if(text == newTileBatch)
-            {
-                current_batch_id = batch_id;
-            }
+            current_batch_id = batch_id;
         }
 
         // get tile description to download
@@ -97,6 +94,10 @@ private:
                     {
                         // normal exit
                         running = false;
+                    },
+                    (Variant any)
+                    {
+                        stderr.writeln("Unknown message received by worker thread: " ~ any.type.text);
                     }
                 );
             }
@@ -145,15 +146,12 @@ private:
         }
 
         // set new tile batch with batch_id
-        void setNewTileBatch(string text, size_t batch_id)
+        void setNewTileBatch(size_t batch_id)
         {
-            if(text == newTileBatch)
+            current_batch_id = batch_id;
+            foreach(w; workers)
             {
-                current_batch_id = batch_id;
-                foreach(w; workers)
-                {
-                    w.prioritySend(newTileBatch, batch_id);
-                }
+                w.prioritySend(batch_id);
             }
         }
 
@@ -229,6 +227,7 @@ private:
 	        foreach(int id; 0..maxWorkers)
                 workers[id] = spawnLinked(&downloading, thisTid, id);
 
+            writeln("Backend launched");
 			// talk to child threads
 	        bool msg;
 	        bool running = true;
@@ -244,7 +243,7 @@ private:
 	            	},
 	            	(OwnerTerminated ot)
 	                {
-	                    debug writeln(__FILE__ ~ "\t" ~ text(__LINE__) ~ ": Owner terminated");
+	                    writeln("Backend exited");
 	                    running = false;
 	                },
 	                (Variant any)
@@ -256,15 +255,17 @@ private:
 		}
 		catch(Throwable t)
 		{
-			writefln("Backend premature finished its execution because of:\n%s", t.msg);
+			writefln("Backend premature finished its execution because of:\n%s\n", t.msg);
+            // complain to parent that something gone wrong
+            frontend.send(Status.backendCrashed);
 		}
 	}
 
 public:
 
-	enum newTileBatch = "new tile batch";
+	enum Status { backendCrashed };
 
-	this(double lon, double lat, string url, string cache_path)
+	this(string url, string cache_path)
 	{
 		url_ = url;
 		cache_path_ = cache_path;

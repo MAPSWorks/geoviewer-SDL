@@ -1,8 +1,8 @@
-import std.stdio: writeln;
+import std.stdio: stderr, writeln, writefln;
 import std.path: baseName;
 import std.conv: to;
 
-import geoviewer: Geoviewer;
+import frontend: FrontEnd;
 import settings: Settings;
 
 int main(string[] args)
@@ -42,13 +42,17 @@ int main(string[] args)
 	uint width = settings.get!(uint, "width");
 	uint height = settings.get!(uint, "height");
 
-	// create viewer
-	auto geoviewer = new Geoviewer(width, height, lon, lat, url, cache_path);
+	auto frontend = new FrontEnd(width, height, lon, lat, url, cache_path);
+	scope(exit) frontend.close();
 
-	// run it
-	geoviewer.run();
-
-	geoviewer.close();
+	try
+	{
+		frontend.run();
+	}
+	catch(Exception e)
+	{
+		stderr.writefln("Exception catched: %s\n", e.msg);
+	}
 
 	return 0;
 }

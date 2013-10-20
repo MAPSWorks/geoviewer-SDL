@@ -4,9 +4,14 @@ import std.conv: to;
 
 import frontend: FrontEnd;
 import settings: Settings;
+import gitinfo: gitCommit, gitDatetime;
 
 int main(string[] args)
 {
+
+	writefln("commit hash: %s", gitCommit);
+	writefln("commit datetime: %s", gitDatetime);
+
 	if(args.length < 2)
 	{
 		writeln(

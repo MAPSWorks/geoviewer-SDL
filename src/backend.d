@@ -41,16 +41,16 @@ private:
         return Tuple!(string, "path", string, "url")(full_path, full_url);
     }
 
-    // parent is Tid of parent, id is unique identificator of child
-    static void downloading(Tid parent, int id)
+    // parent is Tid of parent, worker_id is unique identificator of child
+    static void downloading(Tid parent, int worker_id)
     {
         int zoom, x, y;
         x = y = zoom = -1;
-        string path, url;
         auto running = true; // define it to let delegates below stop thread executing if needed
-        size_t current_batch_id;
+        size_t current_batch_id;  // current batch tile shows id of the last batch processed
 
-        // get tile batch id
+        // let to set specific tile batch id to skip tile batch is being processed before
+        // processing will be complete
         void handleTileBatchId(size_t batch_id)
         {
             current_batch_id = batch_id;
@@ -59,7 +59,11 @@ private:
         // get tile description to download
         void handleTileRequest(size_t batch_id, int local_x, int local_y, int local_zoom, string url, string path)
         {
+            // ignore tile of previous requests
+            if(batch_id < current_batch_id) return;
+
             // use outer variable, see below catch construction
+            current_batch_id = batch_id;
             x = local_x;
             y = local_y;
             zoom = local_zoom;
@@ -69,10 +73,6 @@ private:
                 auto i = uniform(0, 15);
                 if(i == 10)
                     throw new Error("error imitation");
-            }
-            if(batch_id < current_batch_id)  // ignore tile of previous requests
-            {
-                return;
             }
 
             auto tile = Tile.create(x, y, zoom, url, path);
@@ -104,10 +104,10 @@ private:
         }
         catch(Throwable t)
         {
-            debug writefln("thread id %s, throwable: %s", id, t.msg);
-            debug writefln("on throwing x: %s, y: %s, zoom: %s", x, y, zoom);
+            debug writefln("worker id %s, throwable: %s", worker_id, t.msg);
+            debug writefln("on throwing batch id: %s, x: %s, y: %s, zoom: %s", current_batch_id, x, y, zoom);
             // complain to parent that something gone wrong
-            parent.send(id, x, y, zoom);
+            parent.send(worker_id, current_batch_id, x, y, zoom);
         }
     }
 
@@ -132,15 +132,15 @@ private:
         // and parent can relaunch thread with the same zoom, x and y values to try loading once again.
         // If x, y or zoom equals to -1 it means that thread has crashed before valid x, y or zoom
         // recieving and parent can only restart thread without relaunching tile downloading
-        void respawnWorker(int id, int x, int y, int zoom)
+        void respawnWorker(int worker_id, size_t batch_id, int x, int y, int zoom)
         {
-            enforce(id >= 0 && id < maxWorkers);
-            workers[id] = spawnLinked(&downloading, thisTid, id);
-            debug writefln("thread respawned, id: %s", id);
+            enforce(worker_id >= 0 && worker_id < maxWorkers);
+            workers[worker_id] = spawnLinked(&downloading, thisTid, worker_id);
+            debug writefln("worker respawned, id: %s", worker_id);
             // relaunch tile downloading if there is valid info
-            if(x != -1 && y != -1 && zoom != -1)
+            if(batch_id >= current_batch_id && x != -1 && y != -1 && zoom != -1)
             {
-                workers[id].send(x, y, zoom, cache_path, url);
+                workers[worker_id].send(batch_id, x, y, zoom, cache_path, url);
                 debug writefln("tile downloading restarted, x: %s, y: %s, zoom: %s", x, y, zoom);
             }
         }

@@ -11,7 +11,11 @@
 	],
 	"dflags": [
 	],
-	"lflags": [
+	"lflags-windows-x86-dmd": [
+		 "/SUBSYSTEM:WINDOWS:5.01"
+	],
+	"lflags-windows-x86_64-dmd": [
+		 "/SUBSYSTEM:WINDOWS:5.02"
 	],
 	"libs": [
 		"curl"

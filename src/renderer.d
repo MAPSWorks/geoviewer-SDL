@@ -146,11 +146,13 @@ public:
 		glClearColor(1, 0.9, 0.8, 1);
         glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+        uint element_count;
         foreach(gltile; current_set_)
         {
         	gltile.vao.bind();
         	gltile.texture.bind_and_activate();
-        	glDrawElements(GL_TRIANGLE_STRIP, gltile.indices.length.to!int, GL_UNSIGNED_SHORT, null);
+        	element_count = (gltile.indices.length/ushort.sizeof).to!int; // TODO: using conv.to is not optimal for release version
+        	glDrawElements(GL_TRIANGLE_STRIP, element_count, GL_UNSIGNED_SHORT, null);
 			gltile.texture.unbind();
         	gltile.vao.unbind();
         }
@@ -159,7 +161,8 @@ public:
         {
         	gltile.vao.bind();
         	gltile.texture.bind_and_activate();
-        	glDrawElements(GL_TRIANGLE_STRIP, gltile.indices.length.to!int, GL_UNSIGNED_SHORT, null);
+        	element_count = (gltile.indices.length/ushort.sizeof).to!int; // TODO: using conv.to is not optimal for release version
+        	glDrawElements(GL_TRIANGLE_STRIP, element_count, GL_UNSIGNED_SHORT, null);
 			gltile.texture.unbind();
         	gltile.vao.unbind();
         }

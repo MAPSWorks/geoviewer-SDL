@@ -184,7 +184,6 @@ public:
             try
             {
                 data = downloadToMemorySeveralTimes(url, 2);
-                write(path, data);
             }
             catch(Exception e)
             {
@@ -198,11 +197,14 @@ public:
         try
         {
             tile =  loadFromMemory(data);
+
+            // save to cache if no error occurred
+            write(path, data);
         }
         catch(Exception e)
         {
             debug writefln("failed loading from memory: %s", e.msg);
-            debug writefln("\t\tx: %s, y: %s, zoom: %s", x, y, zoom);
+            debug writefln("\tx: %s, y: %s, zoom: %s, url: %s, path: %s", x, y, zoom, url, path);
             data = cast(ubyte[]) read("./cache/nodata.png");
             tile = loadFromMemory(data);
         }

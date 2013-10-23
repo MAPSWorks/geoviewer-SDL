@@ -99,7 +99,7 @@ private:
             }
             catch(Exception e)
             {
-                debug writefln("%s. Retrying %d time...", e.msg, count);
+                debug writefln("%s. Retrying %d time...", e.msg, count + 1);
                 count++;
             }
         } while(count < times - 1);
@@ -180,7 +180,7 @@ public:
             //trying to download from openstreet map
             try
             {
-                data = downloadToMemorySeveralTimes(url, 3);
+                data = downloadToMemorySeveralTimes(url, 2);
                 write(path, data);
             }
             catch(Exception e)

@@ -118,6 +118,7 @@ private:
 	    uint current_worker;
 	    size_t current_batch_id;
 	    shared(Tile)[int][int][int] tile_cache;  // x, y, zoom
+        int[int][int][int] failed_tile_cache; // x, y, zoom - stores count of attempts of tile downloading to avoid infinite fail
 
 	    alias Tuple!(int, "x", int, "y", int, "zoom") TileDescription;
 		DList!TileDescription tile_cache_content; // list of tile that cache contains
@@ -134,15 +135,47 @@ private:
         // recieving and parent can only restart thread without relaunching tile downloading
         void respawnWorker(int worker_id, size_t batch_id, int x, int y, int zoom)
         {
+            enum maxDownloadingAttempt = 2;
+
             enforce(worker_id >= 0 && worker_id < maxWorkers);
             workers[worker_id] = spawnLinked(&downloading, thisTid, worker_id);
             debug writefln("worker respawned, id: %s", worker_id);
-            // relaunch tile downloading if there is valid info
-            if(batch_id >= current_batch_id && x != -1 && y != -1 && zoom != -1)
+
+            // if batch is old or there is no valid info skip relaunching failed task
+            if(batch_id < current_batch_id || x != -1 || y != -1 || zoom != -1)
+                return;
+
+            // check how many time we tried to download this tile
+            int count;
+            auto layerx = failed_tile_cache.get(x, null);
+            if(layerx !is null)
             {
-                workers[worker_id].send(batch_id, x, y, zoom, cache_path, url);
-                debug writefln("tile downloading restarted, x: %s, y: %s, zoom: %s", x, y, zoom);
+                auto layerxy = layerx.get(y, null);
+                if(layerxy !is null)
+                    count = layerxy.get(zoom, 0);
             }
+            failed_tile_cache[x][y][zoom]++;
+
+            // if count is above threshold give up downloading the tile
+            if(count > maxDownloadingAttempt)
+                return;
+
+            string local_url, local_cache_path; // presents url and cache path for the current tile
+            // if count is equal to threshold try to use nodata tile
+            if(count == maxDownloadingAttempt)
+            {
+                // empty url and path to force downloading nodata tile
+                local_url = "";
+                local_cache_path = "";
+            }
+            else
+            {
+                local_url = url;
+                local_cache_path = cache_path;
+            }
+
+            workers[worker_id].send(batch_id, x, y, zoom, local_url, local_cache_path);
+            debug writefln("tile downloading restarted, x: %s, y: %s, zoom: %s", x, y, zoom);
         }
 
         // set new tile batch with batch_id

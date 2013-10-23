@@ -33,6 +33,9 @@ private:
         x = x % n;
         y = y % n;
 
+        if(x < 0) x += n;
+        if(y < 0) y += n;
+
         string absolute_path = absolutePath(local_path);
         auto filename = y.text ~ ".png";
 
@@ -215,6 +218,7 @@ private:
             // if tile not found readress the request to one of workers
             auto current_tid = workers[current_worker];
             auto full = makeFullPathAndUrl(x, y, zoom, url, cache_path);
+
             auto dir = dirName(full.path);
             if(!exists(dir))
                 mkdirRecurse(dir); // it's better to create dirs in one parent thread instead of each of workers

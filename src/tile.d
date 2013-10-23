@@ -168,6 +168,9 @@ public:
     */
     static Tile create(int x, int y, int zoom, string url, string path)
     {
+        //assert(x > 0, "x is negative " ~ x.text);
+        //assert(y > 0, "y is negative " ~ y.text);
+        //assert(zoom > 0, "zoom is negative " ~ zoom.text);
         ubyte[] data;
         // if file exists load it
         if(exists(path))
@@ -198,7 +201,8 @@ public:
         }
         catch(Exception e)
         {
-            debug writefln("failed loading from memory");
+            debug writefln("failed loading from memory: %s", e.msg);
+            debug writefln("\t\tx: %s, y: %s, zoom: %s", x, y, zoom);
             data = cast(ubyte[]) read("./cache/nodata.png");
             tile = loadFromMemory(data);
         }

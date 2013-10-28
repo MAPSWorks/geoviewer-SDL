@@ -13,7 +13,7 @@ private {
 
     import gl3n.linalg: vec3d;
     import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
-    import derelict.freeimage.freeimage: FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
+    import derelict.freeimage.freeimage: DerelictFI, FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
                 FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits, FIF_UNKNOWN,
                 FreeImage_OpenMemory, FreeImage_GetFileTypeFromMemory, FreeImage_LoadFromMemory, FreeImage_CloseMemory;
 
@@ -345,13 +345,15 @@ unittest
   }
 }
 
-static this()
+shared static this()
 {
-  auto ret = curl_global_init(CurlGlobal.all);
-  assert(!ret);
+    auto ret = curl_global_init(CurlGlobal.all);
+    assert(!ret);
+    DerelictFI.load();
 }
 
-static ~this()
+shared static ~this()
 {
-  curl_global_cleanup();
+    DerelictFI.unload();
+    curl_global_cleanup();
 }

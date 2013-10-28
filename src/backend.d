@@ -11,8 +11,6 @@ import std.typecons: Tuple;
 import std.file: exists, mkdirRecurse, dirName, read, write;
 import std.path: buildNormalizedPath, absolutePath;
 
-import derelict.freeimage.freeimage: DerelictFI;
-
 import tile: Tile, tile2world;
 
 // backend получает от фронтенда пользовательский ввод, обрабатывает данные
@@ -85,9 +83,6 @@ private:
 
         try
         {
-            DerelictFI.load();
-            scope(exit) DerelictFI.unload();
-
             while(running)
             {
                 auto msg = receiveTimeout(dur!"msecs"(100), // because this function is single in loop set delay big enough to lower processor loading

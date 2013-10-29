@@ -28,6 +28,9 @@
 		"glamour": "~master",
 		"derelict": "~master"
 	},
+	"sourceFiles": [
+		"src/gitinfo.d"
+	],
 	"preBuildCommands": [
 		"rdmd git_info_generator.d"
 	]

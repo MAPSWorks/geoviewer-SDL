@@ -1,6 +1,6 @@
 {
 	"cache_path": "./cache/OSM-no-label",
-	"tile_url": "http://a.www.toolserver.org/tiles/osm-no-labels/", 
+	"tile_url": "http://a.tiles.wmflabs.org/osm-no-labels/", 
 	"initlat": "50.1", 
 	"initlon": "138.5",
 	"width": "1366",

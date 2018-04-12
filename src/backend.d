@@ -8,8 +8,8 @@ import std.conv: text;
 import std.math: pow;
 import std.container: DList;
 import std.typecons: Tuple;
-import std.file: exists, mkdirRecurse, dirName, read, write;
-import std.path: buildNormalizedPath, absolutePath;
+import std.file: exists, mkdirRecurse, read, write;
+import std.path: buildNormalizedPath, absolutePath, dirName;
 
 import tile: Tile, tile2world;
 
@@ -38,7 +38,13 @@ private:
         auto filename = y.text ~ ".png";
 
         auto full_path = buildNormalizedPath(absolute_path, zoom.text, x.text, filename);
-        auto full_url = url ? url ~ "/" ~ zoom.text ~ "/" ~ x.text ~ "/" ~ filename : "";
+        string full_url;
+        if (url.length)
+        {
+            if (url[$-1..$] == "/")
+                url = url[0..$-1];
+            full_url = url ~ "/" ~ zoom.text ~ "/" ~ x.text ~ "/" ~ filename;
+        }
         return Tuple!(string, "path", string, "url")(full_path, full_url);
     }
 

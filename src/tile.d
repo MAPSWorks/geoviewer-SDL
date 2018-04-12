@@ -1,7 +1,8 @@
 module tile;
 
 private {
-    import std.string: toStringz, text, format;
+    import std.string: toStringz, format;
+    import std.conv : text;
     import std.exception: enforce;
     import std.conv: to;
     import std.math: PI, atan, sinh, pow, log, tan, cos, abs;
@@ -12,62 +13,15 @@ private {
     debug import std.stdio: writefln;
 
     import gl3n.linalg: vec3d;
-    import derelict.opengl3.gl3: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
-    import derelict.freeimage.freeimage: DerelictFI, FreeImage_Load, FreeImage_Unload, FreeImage_GetWidth, FreeImage_GetHeight, FreeImage_GetBits,
-                FreeImage_GetPitch, FreeImage_GetFileType, FreeImage_ConvertTo32Bits, FIF_UNKNOWN,
-                FreeImage_OpenMemory, FreeImage_GetFileTypeFromMemory, FreeImage_LoadFromMemory, FreeImage_CloseMemory;
-
-  struct Chunk
-  {
-    void[] data;
-  }
-
-  extern(C) static size_t
-  WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp)
-  {
-    size_t realsize = size * nmemb;
-    auto mem = cast(Chunk *) userp;
-    mem.data ~= contents[0..realsize];
-
-    return realsize;
-  }
+    import derelict.opengl: GLint, GLsizei, GLenum, GL_RGB, GL_BGRA, GL_UNSIGNED_BYTE;
+    import imageformats;
 
   ubyte[] downloadToMemory(string url)
   {
-    Chunk chunk;
-
-    /* init the curl session */
-    auto curl_handle = curl_easy_init();
-
-    /* specify URL to get */
-    curl_easy_setopt(curl_handle, CurlOption.url, url.toStringz);
-    // this is workaround for curl bug with signal,
-    // see http://stackoverflow.com/questions/9191668/error-longjmp-causes-uninitialized-stack-frame
-    curl_easy_setopt(curl_handle, CurlOption.nosignal, 1);
-
-    /* send all data to this function  */
-    curl_easy_setopt(curl_handle, CurlOption.writefunction, &WriteMemoryCallback);
-
-    /* we pass our 'chunk' struct to the callback function */
-    curl_easy_setopt(curl_handle, CURLOPT_WRITEDATA, cast(void *)&chunk);
-
-    /* some servers don't like requests that are made without a user-agent
-       field, so we provide one */
-    curl_easy_setopt(curl_handle, CurlOption.useragent, "libcurl-agent/1.0".toStringz);
-
-    /* get it! */
-    auto res = curl_easy_perform(curl_handle);
-
-    /* check for errors */
-    if(res != CurlError.ok) {
-      throw new TileException(format("curl_easy_perform() failed: %s\n",
-              curl_easy_strerror(res).text));
-    }
-    debug writefln("%d bytes retrieved", chunk.data.length);
-    /* cleanup curl stuff */
-    curl_easy_cleanup(curl_handle);
-
-    return cast(ubyte[]) chunk.data;
+    import requests;
+    Request rq = Request();
+    Response rs = rq.get(url);
+    return rs.responseBody.data;
   }
 }
 
@@ -112,30 +66,8 @@ private:
     }
 
     static Tile loadFromMemory(ubyte[] data) {
-
-        auto memstream = FreeImage_OpenMemory(data.ptr, data.length);
-        scope(exit) FreeImage_CloseMemory(memstream);
-
-        auto img_fmt = FreeImage_GetFileTypeFromMemory(memstream, 0);
-        enforce(img_fmt != FIF_UNKNOWN, "FIF_UNKNOWN");
-
-        auto original = FreeImage_LoadFromMemory(img_fmt, memstream, 0);
-        assert(original, "original loading from memory failed");
-        scope(exit) FreeImage_Unload(original);
-
-        auto image = FreeImage_ConvertTo32Bits(original);
-        assert(image, "original converting failed");
-        scope(exit) FreeImage_Unload(image);
-
-        int w = FreeImage_GetWidth(image);
-        int h = FreeImage_GetHeight(image);
-
-        size_t size = FreeImage_GetPitch(image) * h;
-        ubyte[] pixels;
-        pixels.length = size;
-        // copy data to our own buffer and free buffer that is owned by FreeImage
-        pixels[] = FreeImage_GetBits(image)[0..size];
-        return new Tile((float[]).init, (float[]).init, pixels, GL_RGB, w, h, GL_BGRA, GL_UNSIGNED_BYTE);
+        auto png = read_png_from_mem(data, ColFmt.RGB);
+        return new Tile((float[]).init, (float[]).init, png.pixels, GL_RGB, png.w, png.h, GL_RGB, GL_UNSIGNED_BYTE);
     }
 
 public:
@@ -227,7 +159,7 @@ public:
             vertices[6] = ww.x;
             vertices[7] = ww.y;
 
-            tex_coords = [ 0.00, 1.00,  1.00, 1.00,  0.00, 0.00,  1.00, 0.00 ];
+            tex_coords = [ 0.00, 0.00,  1.00, 0.00,  0.00, 1.00,  1.00, 1.00 ];
         }
         return tile;
     }
@@ -343,17 +275,4 @@ unittest
     auto t = world2tile(w);
     assert(w == tile2world(t), w.text ~ " " ~ tile2world(t).text);
   }
-}
-
-shared static this()
-{
-    auto ret = curl_global_init(CurlGlobal.all);
-    assert(!ret);
-    DerelictFI.load();
-}
-
-shared static ~this()
-{
-    DerelictFI.unload();
-    curl_global_cleanup();
 }

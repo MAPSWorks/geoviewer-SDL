@@ -18,6 +18,6 @@ public:
 	}
 
 	@property get(T, alias string settings_name)() {
-		return (json_[settings_name].str).to!T;
+		return (json_.object[settings_name].str).to!T;
     }
 }

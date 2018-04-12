@@ -9,7 +9,7 @@ import std.array: array;
 import std.math: pow;
 
 import derelict.sdl2.sdl: SDL_GetError;
-import derelict.opengl3.gl3;
+import derelict.opengl;
 import glamour.vao: VAO;
 import glamour.shader: Shader;
 import glamour.vbo: Buffer, ElementBuffer;

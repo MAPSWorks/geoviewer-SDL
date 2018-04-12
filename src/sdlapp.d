@@ -6,7 +6,7 @@ import std.datetime: dur, StopWatch;
 import core.thread: Thread;
 
 import derelict.sdl2.sdl;
-import derelict.opengl3.gl3;
+import derelict.opengl;
 
 class SDLApp
 {
@@ -32,7 +32,7 @@ public:
 
     this(string title, uint width, uint height)
     {
-        DerelictSDL2.load();
+        DerelictSDL2.load(SharedLibVersion(2, 0, 0));
         DerelictGL3.load();
 
         if (SDL_Init(SDL_INIT_VIDEO) < 0)

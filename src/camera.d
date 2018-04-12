@@ -4,7 +4,7 @@ import std.typecons: Tuple;
 import std.math: pow, round, log2;
 import std.conv: to;
 
-import derelict.opengl3.gl3: glViewport;
+import derelict.opengl: glViewport;
 import gl3n.linalg: vec3, vec3d, mat4;
 
 import tile: world2tile, tile2world, tileSize;
